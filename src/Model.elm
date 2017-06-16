@@ -30,18 +30,22 @@ type alias Grid =
   }
 
 {-| Configuration for a `Grid`.
+Grid coordinates start with (0, 0) top/left and go to (gridWidth-1, gridHeight-1)
+bottom/right.
 -}
 type alias GridConfig =
   { cellSize : Int
   , fillColor : Color
   , gridWidth : Int
   , gridHeight : Int
+  , playerColor :Color
   }
 
 {-| The main application model.
 -}
 type alias Model =
   { grid : Grid
+  , playerHead : (Int, Int)
   , systemTick : Time
   , wsize : Maybe W.Size
   }
@@ -57,14 +61,30 @@ type Msg
 -}
 init : (Model, Cmd Msg)
 init =
-  ( { grid = initGrid
-    , systemTick = 0
-    , wsize = Nothing
-    }
-  , Cmd.batch
-    [ W.size |> Task.perform WindowResize
-    ]
-  )
+  let
+    g = initGrid
+    playerPos = (g.config.gridWidth // 2, g.config.gridHeight - 1)
+    pg =
+      let
+        (x, y) = playerPos
+      in
+        { g
+          | cells =
+            Dict.update
+              (toGridCoords playerPos)
+              (always <| Just {color = g.config.playerColor, cx = x, cy = y})
+              g.cells
+        }
+  in
+    ( { grid = pg
+      , playerHead = playerPos
+      , systemTick = 0
+      , wsize = Nothing
+      }
+    , Cmd.batch
+      [ W.size |> Task.perform WindowResize
+      ]
+    )
 
 
 {-| Initialize game `Grid` configuration.
@@ -75,6 +95,7 @@ initGridConfig =
   , fillColor = Color.lightBlue
   , gridWidth = 64
   , gridHeight = 46
+  , playerColor = Color.darkRed
   }
 
 {-| Initialize game `Grid` with things to render.
@@ -88,7 +109,7 @@ initGrid =
         gc.gridWidth
         gc.fillColor
         |> List.indexedMap (\i c ->
-          ( toGridCoords i y
+          ( toGridCoords (i, y)
           , {color = c, cx = i, cy = y}
           )
         )
@@ -97,7 +118,7 @@ initGrid =
         (gc.gridHeight - 2)
         gc.fillColor
         |> List.indexedMap (\i c ->
-          ( toGridCoords x (i + 1)
+          ( toGridCoords (x, (i + 1))
           , {color = c, cx = x, cy = (i + 1)}
           )
         )
@@ -112,6 +133,6 @@ initGrid =
 
 {-| Convert `Grid` coordinates x, y to a String key: "x-y"
 -}
-toGridCoords : Int -> Int -> String
-toGridCoords x y =
+toGridCoords : (Int, Int) -> String
+toGridCoords (x, y) =
   (toString x) ++ "-" ++ (toString y)
