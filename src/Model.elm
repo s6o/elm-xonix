@@ -2,9 +2,12 @@ module Model exposing
   ( Cell
   , Grid
   , GridConfig
+  , KeyName(..)
+  , KeyState(..)
   , Model
   , Msg(..)
   , init
+  , toGridCoords
   )
 
 import Color exposing (Color)
@@ -41,6 +44,18 @@ type alias GridConfig =
   , playerColor :Color
   }
 
+{-|-}
+type KeyName
+  = KeyArrowDown
+  | KeyArrowLeft
+  | KeyArrowRight
+  | KeyArrowUp
+
+{-|-}
+type KeyState
+  = KeyNotPressed
+  | KeyPressed
+
 {-| The main application model.
 -}
 type alias Model =
@@ -53,7 +68,9 @@ type alias Model =
 {-| Application messages.
 -}
 type Msg
-  = SystemTick Time
+  = Key KeyName KeyState
+  | NoOp
+  | SystemTick Time
   | WindowResize W.Size
 
 

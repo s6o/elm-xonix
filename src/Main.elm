@@ -2,7 +2,8 @@ module Main exposing (..)
 
 import AnimationFrame as AF
 import Html
-import Model exposing (Model, Msg(..))
+import Keyboard exposing (KeyCode)
+import Model exposing (KeyName(..), KeyState(..), Model, Msg(..))
 import Update
 import View
 import Window as W
@@ -26,5 +27,24 @@ subscriptions : Model -> Sub Msg
 subscriptions m =
   Sub.batch
     [ W.resizes WindowResize
+    {-}
     , AF.times SystemTick
+    -}
+    , Keyboard.downs (key KeyPressed)
+    , Keyboard.ups (key KeyNotPressed)
     ]
+
+
+key : KeyState -> KeyCode -> Msg
+key keyState keyCode =
+  case keyCode of
+      37 ->
+          Key KeyArrowLeft keyState
+      39 ->
+          Key KeyArrowRight keyState
+      40 ->
+          Key KeyArrowDown keyState
+      38 ->
+          Key KeyArrowUp keyState
+      _ ->
+          NoOp
