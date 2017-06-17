@@ -12,7 +12,7 @@ import Html.Lazy
 
 view : Model -> Html Msg
 view m =
-  Html.Lazy.lazy render m
+  {-Html.Lazy.lazy-} render m
 
 render : Model -> Html Msg
 render m =
