@@ -34,7 +34,11 @@ update msg m =
       in
         ( { m
             | wsize = Just ws
-            , playerHead = Just playerPos
+            , playerHead =
+              m.playerHead
+                |> Maybe.map (\ph -> ph)
+                |> Maybe.withDefault playerPos
+                |> Just
           }
         , Task.succeed True |> Task.perform (\_ -> Key KeyArrowDown KeyPressed)
         )
