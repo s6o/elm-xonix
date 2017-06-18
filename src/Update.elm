@@ -1,5 +1,6 @@
 module Update exposing (..)
 
+import Color exposing (Color)
 import Dict exposing (Dict)
 import Model exposing
   ( Cell
@@ -34,7 +35,6 @@ update msg m =
         ( { m
             | wsize = Just ws
             , playerHead = Just playerPos
-            , grid = m.grid |> (\g -> {g | cells = movePlayerHead m KeyArrowDown})
           }
         , Task.succeed True |> Task.perform (\_ -> Key KeyArrowDown KeyPressed)
         )
@@ -47,42 +47,71 @@ keyUpdate m keyName keyState =
     , Cmd.none
     )
   else
-    ( { m
-        | grid = m.grid |> (\g -> {g | cells = movePlayerHead m keyName})
-        , playerHead = Just <| newPlayerPos m keyName
-      }
+    ( movePlayerHead m keyName
     , Cmd.none
     )
 
 {-|-}
-movePlayerHead : Model -> KeyName -> Dict String Cell
+movePlayerHead : Model -> KeyName -> Model
 movePlayerHead m keyName =
   m.playerHead
     |> Maybe.map (\playerPos ->
       let
-        _ = Debug.log "movePlayerHead" keyName
         (px, py) = playerPos
         newPos = newPlayerPos m keyName
       in
-        m.grid.cells
-          |> Dict.get (Model.toGridKey playerPos)
-          |> Maybe.map (\c ->
-            m.grid.cells
-              |> Dict.update (Model.toGridKey playerPos)
-                  (\_ -> Debug.log "restore old cell" {c | color = m.grid.config.fillColor} |> Just)
-              |> Dict.update (Model.toGridKey newPos)
-                  (\_ ->
-                    Debug.log "new playerPos 1"
-                    { color = m.grid.config.playerColor
-                    , cx = Tuple.first newPos
-                    , cy = Tuple.second newPos
-                    }
-                    |> Just
+        { m
+          | playerHead = Just newPos
+          , playerTrail =
+            if not <| isFrameCell m playerPos then
+              Debug.log "trail append" (playerPos :: m.playerTrail)
+            else
+              m.playerTrail
+          , grid = m.grid |> (\g ->
+              {g | cells =
+                m.grid.cells
+                  |> Dict.get (Model.toGridKey playerPos)
+                  |> Maybe.map (\c ->
+                    m.grid.cells
+                      |> Dict.update (Model.toGridKey playerPos)
+                          (\_ -> {c | color = oldCellColor m playerPos} |> Just)
+                      |> Dict.update (Model.toGridKey newPos)
+                          (\_ ->
+                            { color = m.grid.config.playerColor
+                            , cx = Tuple.first newPos
+                            , cy = Tuple.second newPos
+                            }
+                            |> Just
+                          )
                   )
-          )
-          |> Maybe.withDefault m.grid.cells
+                  |> Maybe.withDefault m.grid.cells
+              }
+            )
+        }
+
     )
-    |> Maybe.withDefault m.grid.cells
+    |> Maybe.withDefault m
+
+
+oldCellColor : Model -> (Int, Int) -> Color
+oldCellColor m pos =
+  if List.member pos m.filledArea then
+    m.grid.config.fillColor
+  else
+    m.grid.config.trailColor
+
+
+isFrameCell : Model -> (Int, Int) -> Bool
+isFrameCell m pos =
+  List.member pos m.filledArea
+
+
+isFreeCell : Model -> (Int, Int) -> Bool
+isFreeCell m pos =
+  m.grid.cells
+    |> Dict.get (Model.toGridKey pos)
+    |> Maybe.map (\c -> c.color == m.grid.config.freeColor)
+    |> Maybe.withDefault False
 
 
 newPlayerPos : Model -> KeyName -> (Int, Int)

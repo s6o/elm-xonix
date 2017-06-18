@@ -62,7 +62,9 @@ type KeyState
 -}
 type alias Model =
   { grid : Grid
+  , filledArea : List (Int, Int)
   , playerHead : Maybe (Int, Int)
+  , playerTrail : List (Int, Int)
   , systemTick : Time
   , wsize : Maybe W.Size
   }
@@ -80,15 +82,23 @@ type Msg
 -}
 init : (Model, Cmd Msg)
 init =
-  ( { grid = initGrid
-    , playerHead = Nothing
-    , systemTick = 0
-    , wsize = Nothing
-    }
-  , Cmd.batch
-    [ W.size |> Task.perform WindowResize
-    ]
-  )
+  let
+    g = initGrid
+  in
+    ( { grid = g
+      , filledArea = g.cells
+          |> Dict.values
+          |> List.filter (\c -> c.color == g.config.fillColor)
+          |> List.map (\c -> (c.cx, c.cy))
+      , playerHead = Nothing
+      , playerTrail = []
+      , systemTick = 0
+      , wsize = Nothing
+      }
+    , Cmd.batch
+      [ W.size |> Task.perform WindowResize
+      ]
+    )
 
 
 {-| Initialize game `Grid` configuration.
