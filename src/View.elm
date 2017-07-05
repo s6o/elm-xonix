@@ -2,7 +2,7 @@ module View exposing
   ( view
   )
 
-import Model exposing (Model, Msg(..))
+import Model exposing (CellShape(..), Model, Msg(..))
 import Collage as C
 import Dict exposing (Dict)
 import Element as E
@@ -29,10 +29,17 @@ render m =
       |> Maybe.map (\ws ->
         Dict.values m.grid.cells
           |> List.map (\c ->
-            toFloat cs
-              |> C.square
-              |> C.filled c.color
-              |> C.move (toCoords c)
+            case c.shape of
+              Rectangle ->
+                toFloat cs
+                  |> C.square
+                  |> C.filled c.color
+                  |> C.move (toCoords c)
+              Circle ->
+                toFloat cs / 2
+                  |> C.circle
+                  |> C.filled c.color
+                  |> C.move (toCoords c)
           )
           |> C.collage pw ph
           |> E.container ws.width ws.height E.middle

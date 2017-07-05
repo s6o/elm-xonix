@@ -1,5 +1,8 @@
 module Model exposing
-  ( Cell
+  ( Ball
+  , Cell
+  , CellShape(..)
+  , Direction(..)
   , Grid
   , GridConfig
   , KeyName(..)
@@ -12,10 +15,19 @@ module Model exposing
 
 import Color exposing (Color)
 import Dict exposing (Dict)
-import Task
+import Random exposing (Generator, Seed)
+import Task exposing (Task)
 import Time exposing (Time)
 import Window as W
 
+
+{-|-}
+type alias Ball =
+  { color : Color
+  , bx : Int
+  , by : Int
+  , d : Direction
+  }
 
 {-| A cell with background color and `Grid` coordinates.
 -}
@@ -23,7 +35,19 @@ type alias Cell =
   { color : Color
   , cx : Int
   , cy : Int
+  , shape : CellShape
   }
+
+{-|-}
+type CellShape
+  = Rectangle
+  | Circle
+
+type Direction
+  = NE
+  | NW
+  | SE
+  | SW
 
 {-| The game `Grid`.
 -}
@@ -61,7 +85,8 @@ type KeyState
 {-| The main application model.
 -}
 type alias Model =
-  { grid : Grid
+  { balls : List Ball
+  , grid : Grid
   , filledArea : List (Int, Int)
   , playerHead : Maybe (Int, Int)
   , playerTrail : List (Int, Int)
@@ -74,6 +99,7 @@ type alias Model =
 type Msg
   = Key KeyName KeyState
   | NoOp
+  | PlaceBalls (List (Int, Int), Seed)
   | SystemTick Time
   | WindowResize W.Size
 
@@ -85,7 +111,8 @@ init =
   let
     g = initGrid
   in
-    ( { grid = g
+    ( { balls = []
+      , grid = g
       , filledArea = g.cells
           |> Dict.values
           |> List.filter (\c -> c.color == g.config.fillColor)
@@ -97,8 +124,31 @@ init =
       }
     , Cmd.batch
       [ W.size |> Task.perform WindowResize
+      , initBalls 1 g |> Task.perform PlaceBalls
       ]
     )
+
+
+{-|-}
+initBalls : Int -> Grid -> Task x (List (Int, Int), Seed)
+initBalls c g =
+  Time.now
+    |> Task.map (\t ->
+      let
+        pg = positionGenerator c g
+      in
+        Basics.round t
+          |> Random.initialSeed
+          |> Random.step pg
+    )
+
+
+{-|-}
+positionGenerator : Int -> Grid -> Generator (List (Int, Int))
+positionGenerator c g =
+  Random.list c
+    <| Random.pair (Random.int 0 (g.config.gridWidth - 2))
+      (Random.int 0 (g.config.gridHeight - 2))
 
 
 {-| Initialize game `Grid` configuration.
@@ -126,7 +176,7 @@ initGrid =
           List.repeat (gc.gridWidth - 2) c
             |> List.indexedMap (\x c ->
               ( toGridKey (x + 1, y + 1)
-              , {color = c, cx = x + 1, cy = y + 1}
+              , {color = c, cx = x + 1, cy = y + 1, shape = Rectangle}
               )
             )
         )
@@ -138,7 +188,7 @@ initGrid =
         gc.fillColor
         |> List.indexedMap (\i c ->
           ( toGridKey (i, y)
-          , {color = c, cx = i, cy = y}
+          , {color = c, cx = i, cy = y, shape = Rectangle}
           )
         )
     yBorder x =
@@ -147,7 +197,7 @@ initGrid =
         gc.fillColor
         |> List.indexedMap (\i c ->
           ( toGridKey (x, (i + 1))
-          , {color = c, cx = x, cy = (i + 1)}
+          , {color = c, cx = x, cy = (i + 1), shape = Rectangle}
           )
         )
   in

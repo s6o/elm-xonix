@@ -4,6 +4,8 @@ import Color exposing (Color)
 import Dict exposing (Dict)
 import Model exposing
   ( Cell
+  , CellShape(..)
+  , Direction(..)
   , Grid
   , KeyName(..)
   , KeyState(..)
@@ -24,10 +26,25 @@ update msg m =
       ( m
       , Cmd.none
       )
+    PlaceBalls (ballPositions, _) ->
+      let
+        newBalls =
+          ballPositions
+            |> List.map (\(x, y) -> {color = Color.orange, bx = x, by = y, d = SW})
+        subGrid =
+          newBalls
+            |> List.map (\b -> {color = b.color, cx = b.bx, cy = b.by, shape = Circle})
+        newGrid =
+          m.grid |> (\g -> {g | cells = placeInGrid g.cells subGrid})
+      in
+        ( { m
+            | balls = newBalls
+            , grid = newGrid
+          }
+        , Cmd.none
+        )
     SystemTick t ->
-      ( {m | systemTick = t}
-      , Cmd.none
-      )
+      {m | systemTick = t} |> moveBalls
     WindowResize ws ->
       let
         playerPos = (m.grid.config.gridWidth // 2, m.grid.config.gridHeight - 1)
@@ -54,6 +71,11 @@ keyUpdate m keyName keyState =
     ( movePlayerHead m keyName
     , Cmd.none
     )
+
+{-|-}
+moveBalls : Model -> (Model, Cmd Msg)
+moveBalls m =
+  (m, Cmd.none)
 
 {-|-}
 movePlayerHead : Model -> KeyName -> Model
@@ -84,6 +106,7 @@ movePlayerHead m keyName =
                             { color = m.grid.config.playerColor
                             , cx = Tuple.first newPos
                             , cy = Tuple.second newPos
+                            , shape = Rectangle
                             }
                             |> Just
                           )
@@ -140,3 +163,9 @@ newPlayerPos m keyName =
         ( px
         , if py - 1 > -1 then py - 1 else py
         )
+
+placeInGrid : Dict String Cell -> List Cell -> Dict String Cell
+placeInGrid grid subgrid =
+  case subgrid of
+    [] -> grid
+    c::cs -> placeInGrid (Dict.insert (Model.toGridKey (c.cx, c.cy)) c grid) cs
