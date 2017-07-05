@@ -124,7 +124,7 @@ init =
       }
     , Cmd.batch
       [ W.size |> Task.perform WindowResize
-      , initBalls 1 g |> Task.perform PlaceBalls
+      , initBalls 3 g |> Task.perform PlaceBalls
       ]
     )
 

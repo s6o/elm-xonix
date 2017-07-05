@@ -27,9 +27,7 @@ subscriptions : Model -> Sub Msg
 subscriptions m =
   Sub.batch
     [ W.resizes WindowResize
-    {-}
     , AF.times SystemTick
-    -}
     , Keyboard.downs (key KeyPressed)
     , Keyboard.ups (key KeyNotPressed)
     ]

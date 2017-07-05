@@ -28,14 +28,23 @@ update msg m =
       )
     PlaceBalls (ballPositions, _) ->
       let
+        initDirection idx =
+          case idx of
+            0 -> NE
+            1 -> SE
+            2 -> SW
+            3 -> NW
+            _ -> NW
         newBalls =
           ballPositions
-            |> List.map (\(x, y) -> {color = Color.orange, bx = x, by = y, d = SW})
+            |> List.indexedMap (\i (x, y) ->
+              {color = Color.orange, bx = x, by = y, d = initDirection <| (i + 1) % 4}
+            )
         subGrid =
           newBalls
             |> List.map (\b -> {color = b.color, cx = b.bx, cy = b.by, shape = Circle})
         newGrid =
-          m.grid |> (\g -> {g | cells = placeInGrid g.cells subGrid})
+          m.grid |> (\g -> {g | cells = placeInGrid subGrid g.cells})
       in
         ( { m
             | balls = newBalls
@@ -75,7 +84,78 @@ keyUpdate m keyName keyState =
 {-|-}
 moveBalls : Model -> (Model, Cmd Msg)
 moveBalls m =
-  (m, Cmd.none)
+  let
+    newBalls =
+      m.balls
+        |> List.map (\b ->
+          let
+            (dx, dy, dd) =
+              case b.d of
+                NE ->
+                  if isCornerCell m (b.bx + 1, b.by - 1) b.d then
+                    (b.bx - 1, b.by + 1, SW)
+                  else
+                    if isFrameCell m (b.bx, b.by - 1) then
+                      (b.bx + 1, b.by + 1, SE)
+                    else if isFrameCell m (b.bx + 1, b.by) then
+                      (b.bx - 1, b.by - 1, NW)
+                    else
+                      (b.bx + 1, b.by - 1, NE)
+                NW ->
+                  if isCornerCell m (b.bx - 1, b.by - 1) b.d then
+                    (b.bx + 1, b.by + 1, SE)
+                  else
+                    if isFrameCell m (b.bx - 1, b.by) then
+                      (b.bx + 1, b.by - 1, NE)
+                    else if isFrameCell m (b.bx, b.by - 1) then
+                      (b.bx - 1, b.by + 1, SW)
+                    else
+                      (b.bx - 1, b.by - 1, NW)
+                SE ->
+                  if isCornerCell m (b.bx + 1, b.by + 1) b.d then
+                    (b.bx - 1, b.by - 1, NW)
+                  else
+                    if isFrameCell m (b.bx + 1, b.by) then
+                      (b.bx - 1, b.by + 1, SW)
+                    else if isFrameCell m (b.bx, b.by + 1) then
+                      (b.bx + 1, b.by - 1, NE)
+                    else
+                      (b.bx + 1, b.by + 1, SE)
+                SW ->
+                  if isCornerCell m (b.bx - 1, b.by + 1) b.d then
+                    (b.bx + 1, b.by - 1, NE)
+                  else
+                    if isFrameCell m (b.bx, b.by + 1) then
+                      (b.bx - 1, b.by - 1, NW)
+                    else if isFrameCell m (b.bx - 1, b.by) then
+                      (b.bx + 1, b.by + 1, SE)
+                    else
+                      (b.bx - 1, b.by + 1, SW)
+          in
+            {b | bx = dx, by = dy, d = dd}
+        )
+    oldPositions =
+      m.balls
+        |> List.map (\b ->
+          {color = m.grid.config.freeColor, cx = b.bx, cy = b.by, shape = Rectangle}
+        )
+    newPositions =
+      newBalls
+        |> List.map (\b ->
+          {color = b.color, cx = b.bx, cy = b.by, shape = Circle}
+        )
+  in
+    ( { m
+        | balls = newBalls
+        , grid = m.grid |> (\g ->
+            {g | cells =
+              placeInGrid oldPositions g.cells
+                |> placeInGrid newPositions
+            }
+          )
+      }
+    , Cmd.none
+    )
 
 {-|-}
 movePlayerHead : Model -> KeyName -> Model
@@ -90,7 +170,7 @@ movePlayerHead m keyName =
           | playerHead = Just newPos
           , playerTrail =
             if not <| isFrameCell m playerPos then
-              Debug.log "trail append" (playerPos :: m.playerTrail)
+              playerPos :: m.playerTrail
             else
               m.playerTrail
           , grid = m.grid |> (\g ->
@@ -128,6 +208,22 @@ oldCellColor m pos =
     m.grid.config.trailColor
 
 
+isCornerCell : Model -> (Int, Int) -> Direction -> Bool
+isCornerCell m (x, y) d =
+  (List.member (x, y) m.filledArea)
+  &&
+  (
+    case d of
+      NE ->
+        (List.member (x - 1, y) m.filledArea) && (List.member (x, y + 1) m.filledArea)
+      NW ->
+        (List.member (x + 1, y) m.filledArea) && (List.member (x, y + 1) m.filledArea)
+      SE ->
+        (List.member (x, y - 1) m.filledArea) && (List.member (x - 1, y) m.filledArea)
+      SW ->
+        (List.member (x, y - 1) m.filledArea) && (List.member (x + 1, y) m.filledArea)
+  )
+
 isFrameCell : Model -> (Int, Int) -> Bool
 isFrameCell m pos =
   List.member pos m.filledArea
@@ -164,8 +260,8 @@ newPlayerPos m keyName =
         , if py - 1 > -1 then py - 1 else py
         )
 
-placeInGrid : Dict String Cell -> List Cell -> Dict String Cell
-placeInGrid grid subgrid =
+placeInGrid : List Cell -> Dict String Cell -> Dict String Cell
+placeInGrid subgrid grid =
   case subgrid of
     [] -> grid
-    c::cs -> placeInGrid (Dict.insert (Model.toGridKey (c.cx, c.cy)) c grid) cs
+    c::cs -> placeInGrid cs (Dict.insert (Model.toGridKey (c.cx, c.cy)) c grid)
