@@ -13,36 +13,40 @@ import Window as W
 -}
 main : Program Never Model Msg
 main =
-  Html.program
-    { init = Model.init
-    , subscriptions = subscriptions
-    , update = Update.update
-    , view = View.view
-    }
+    Html.program
+        { init = Model.init
+        , subscriptions = subscriptions
+        , update = Update.update
+        , view = View.view
+        }
 
 
 {-| Subscriptions
 -}
 subscriptions : Model -> Sub Msg
 subscriptions m =
-  Sub.batch
-    [ W.resizes WindowResize
-    , AF.times SystemTick
-    , Keyboard.downs (key KeyPressed)
-    , Keyboard.ups (key KeyNotPressed)
-    ]
+    Sub.batch
+        [ W.resizes WindowResize
+        , AF.times SystemTick
+        , Keyboard.downs (key KeyPressed)
+        , Keyboard.ups (key KeyNotPressed)
+        ]
 
 
 key : KeyState -> KeyCode -> Msg
 key keyState keyCode =
-  case keyCode of
-      37 ->
-          Key KeyArrowLeft keyState
-      39 ->
-          Key KeyArrowRight keyState
-      40 ->
-          Key KeyArrowDown keyState
-      38 ->
-          Key KeyArrowUp keyState
-      _ ->
-          NoOp
+    case keyCode of
+        37 ->
+            Key KeyArrowLeft keyState
+
+        39 ->
+            Key KeyArrowRight keyState
+
+        40 ->
+            Key KeyArrowDown keyState
+
+        38 ->
+            Key KeyArrowUp keyState
+
+        _ ->
+            NoOp
