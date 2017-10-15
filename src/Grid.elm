@@ -4,6 +4,7 @@ module Grid
         , Colors
         , Size
         , init
+        , nextBallPositions
         , update
         )
 
@@ -85,6 +86,121 @@ init level posMsg =
         , initBalls level grid
             |> Task.perform posMsg
         )
+
+
+nextBallPositions : Grid -> List Cell
+nextBallPositions grid =
+    grid.cells
+        |> Dict.filter (\_ c -> Cell.equal c.shape (Ball NE))
+        |> Dict.values
+        |> List.map
+            (\c ->
+                case c.shape of
+                    Ball direction ->
+                        case direction of
+                            NE ->
+                                nextBallNE grid c
+
+                            NW ->
+                                nextBallNW grid c
+
+                            SE ->
+                                nextBallSE grid c
+
+                            SW ->
+                                nextBallSW grid c
+
+                    _ ->
+                        c
+            )
+
+
+nextBallNE : Grid -> Cell -> Cell
+nextBallNE grid c =
+    let
+        nextCell =
+            Dict.get ( c.cellX + 1, c.cellY - 1 ) grid.cells
+
+        leftCell =
+            Dict.get ( c.cellX - 1, c.cellY - 1 ) grid.cells
+
+        rightCell =
+            Dict.get ( c.cellX + 1, c.cellY + 1 ) grid.cells
+    in
+        if Cell.isSpace nextCell then
+            { c | cellX = c.cellX + 1, cellY = c.cellY - 1 }
+        else if Cell.isSpace leftCell then
+            { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
+        else if Cell.isSpace rightCell then
+            { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
+        else
+            { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
+
+
+nextBallNW : Grid -> Cell -> Cell
+nextBallNW grid c =
+    let
+        nextCell =
+            Dict.get ( c.cellX - 1, c.cellY - 1 ) grid.cells
+
+        leftCell =
+            Dict.get ( c.cellX - 1, c.cellY + 1 ) grid.cells
+
+        rightCell =
+            Dict.get ( c.cellX + 1, c.cellY - 1 ) grid.cells
+    in
+        if Cell.isSpace nextCell then
+            { c | cellX = c.cellX - 1, cellY = c.cellY - 1 }
+        else if Cell.isSpace leftCell then
+            { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
+        else if Cell.isSpace rightCell then
+            { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
+        else
+            { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
+
+
+nextBallSE : Grid -> Cell -> Cell
+nextBallSE grid c =
+    let
+        nextCell =
+            Dict.get ( c.cellX + 1, c.cellY + 1 ) grid.cells
+
+        leftCell =
+            Dict.get ( c.cellX + 1, c.cellY - 1 ) grid.cells
+
+        rightCell =
+            Dict.get ( c.cellX - 1, c.cellY + 1 ) grid.cells
+    in
+        if Cell.isSpace nextCell then
+            { c | cellX = c.cellX + 1, cellY = c.cellY + 1 }
+        else if Cell.isSpace leftCell then
+            { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
+        else if Cell.isSpace rightCell then
+            { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
+        else
+            { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
+
+
+nextBallSW : Grid -> Cell -> Cell
+nextBallSW grid c =
+    let
+        nextCell =
+            Dict.get ( c.cellX - 1, c.cellY + 1 ) grid.cells
+
+        leftCell =
+            Dict.get ( c.cellX + 1, c.cellY + 1 ) grid.cells
+
+        rightCell =
+            Dict.get ( c.cellX - 1, c.cellY - 1 ) grid.cells
+    in
+        if Cell.isSpace nextCell then
+            { c | cellX = c.cellX - 1, cellY = c.cellY + 1 }
+        else if Cell.isSpace leftCell then
+            { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
+        else if Cell.isSpace rightCell then
+            { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
+        else
+            { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
 
 
 {-| Partition and update `Cell`s in `Shape` clusters.

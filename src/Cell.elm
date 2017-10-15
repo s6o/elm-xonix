@@ -7,6 +7,7 @@ module Cell
         , border
         , direction
         , equal
+        , isSpace
         , player
         , space
         , trail
@@ -88,6 +89,16 @@ equal s1 s2 =
 
         _ ->
             False
+
+
+isSpace : Maybe Cell -> Bool
+isSpace mc =
+    case mc of
+        Nothing ->
+            False
+
+        Just c ->
+            c.shape == Space
 
 
 player : Color -> Int -> Int -> Cell

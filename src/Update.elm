@@ -43,7 +43,11 @@ update msg model =
             )
 
         SystemTick t ->
-            ( { model | systemTick = t }
+            ( { model
+                | grid =
+                    Grid.nextBallPositions model.grid
+                        |> Grid.update model.grid
+              }
             , Cmd.none
             )
 
