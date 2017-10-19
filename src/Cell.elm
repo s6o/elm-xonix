@@ -6,12 +6,12 @@ module Cell
         , ball
         , border
         , direction
+        , dxdy
         , equal
         , isSpace
         , player
-        , space
-        , trail
         , size
+        , trail
         )
 
 import Color exposing (Color)
@@ -36,7 +36,6 @@ type Shape
     = Ball Direction
     | Border
     | Player
-    | Space
     | Trail
 
 
@@ -69,6 +68,47 @@ direction idx =
             NW
 
 
+{-| Calculate a new Elm canvas point given a direction, delta and a destination point.
+
+    NW      ^ y+    NE
+            |
+            |
+    x-      |
+    --------|-------->
+            |       x+
+            |
+            |
+    SW   y- |       SE
+
+-}
+dxdy : Direction -> Float -> ( Float, Float ) -> ( Float, Float )
+dxdy d delta ( destX, destY ) =
+    let
+        cellDelta =
+            toFloat size - delta
+    in
+    case d of
+        NE ->
+            ( destX - cellDelta
+            , destY - cellDelta
+            )
+
+        NW ->
+            ( destX + cellDelta
+            , destY - cellDelta
+            )
+
+        SE ->
+            ( destX - cellDelta
+            , destY + cellDelta
+            )
+
+        SW ->
+            ( destX + cellDelta
+            , destY + cellDelta
+            )
+
+
 equal : Shape -> Shape -> Bool
 equal s1 s2 =
     case ( s1, s2 ) of
@@ -79,9 +119,6 @@ equal s1 s2 =
             True
 
         ( Player, Player ) ->
-            True
-
-        ( Space, Space ) ->
             True
 
         ( Trail, Trail ) ->
@@ -95,20 +132,15 @@ isSpace : Maybe Cell -> Bool
 isSpace mc =
     case mc of
         Nothing ->
-            False
+            True
 
-        Just c ->
-            c.shape == Space
+        Just _ ->
+            False
 
 
 player : Color -> Int -> Int -> Cell
 player c x y =
     Cell x y c Player
-
-
-space : Color -> Int -> Int -> Cell
-space c x y =
-    Cell x y c Space
 
 
 trail : Color -> Int -> Int -> Cell

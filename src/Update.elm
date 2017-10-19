@@ -1,9 +1,9 @@
 module Update
     exposing
-        ( update
+        ( init
+        , update
         )
 
-import Cell
 import Grid
 import Model
     exposing
@@ -12,6 +12,25 @@ import Model
         , Model
         , Msg(..)
         )
+import Task exposing (Task)
+import Window as W
+
+
+init : ( Model, Cmd Msg )
+init =
+    let
+        ( g, gc ) =
+            Grid.init 1 PlaceBalls
+    in
+    ( { grid = g
+      , systemTick = 0
+      , wsize = Nothing
+      }
+    , Cmd.batch
+        [ W.size |> Task.perform WindowResize
+        , gc
+        ]
+    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -25,29 +44,34 @@ update msg model =
         Key keyName keyState ->
             keyUpdate model keyName keyState
 
-        PlaceBalls ( ballPositions, _ ) ->
+        PlaceBalls initialBalls ->
             ( { model
                 | grid =
-                    ballPositions
-                        |> List.indexedMap
-                            (\i ( x, y ) ->
-                                Cell.ball
-                                    model.grid.colors.ball
-                                    x
-                                    y
-                                    (Cell.direction <| (i + 1) % 4)
-                            )
-                        |> Grid.update model.grid
+                    Grid.update model.grid initialBalls
+                        |> Grid.initAnimation 0
+                
               }
             , Cmd.none
             )
 
         SystemTick t ->
-            ( { model
-                | grid =
-                    Grid.nextBallPositions model.grid
-                        |> Grid.update model.grid
-              }
+            let
+                newModel =
+                    if Grid.inAnimation t model.grid then
+                        { model
+                            | grid = Grid.animate t model.grid
+                            , systemTick = t
+                        }
+                    else
+                        { model
+                            | grid =
+                                Grid.nextBallPositions model.grid
+                                    |> Grid.update model.grid
+                                    |> Grid.initAnimation t
+                            , systemTick = t
+                        }
+            in
+            ( newModel
             , Cmd.none
             )
 
@@ -57,6 +81,8 @@ update msg model =
             )
 
 
+{-| @private
+-}
 keyUpdate : Model -> KeyName -> KeyState -> ( Model, Cmd Msg )
 keyUpdate model keyName keyState =
     if keyState == KeyNotPressed then

@@ -14,7 +14,7 @@ import Window as W
 main : Program Never Model Msg
 main =
     Html.program
-        { init = Model.init
+        { init = Update.init
         , subscriptions = subscriptions
         , update = Update.update
         , view = View.view

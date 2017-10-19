@@ -4,12 +4,10 @@ module Model
         , KeyState(..)
         , Model
         , Msg(..)
-        , init
         )
 
+import Cell exposing (Cell)
 import Grid exposing (Grid)
-import Random exposing (Generator, Seed)
-import Task exposing (Task)
 import Time exposing (Time)
 import Window as W
 
@@ -36,23 +34,6 @@ type alias Model =
 type Msg
     = NoOp
     | Key KeyName KeyState
-    | PlaceBalls ( List ( Int, Int ), Seed )
+    | PlaceBalls (List (Maybe Cell))
     | SystemTick Time
     | WindowResize W.Size
-
-
-init : ( Model, Cmd Msg )
-init =
-    let
-        ( g, gc ) =
-            Grid.init 1 PlaceBalls
-    in
-        ( { grid = g
-          , systemTick = 0
-          , wsize = Nothing
-          }
-        , Cmd.batch
-            [ W.size |> Task.perform WindowResize
-            , gc
-            ]
-        )

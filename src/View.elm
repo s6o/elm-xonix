@@ -44,28 +44,32 @@ renderGrid : Grid -> Form
 renderGrid g =
     g.cells
         |> Dict.values
-        |> List.map (renderCell g)
+        |> List.map (Maybe.map (\c -> renderCell g c) >> Maybe.withDefault (C.group []))
         |> C.group
 
 
 renderCell : Grid -> Cell -> Form
 renderCell g c =
     case c.shape of
-        Ball _ ->
+        Ball direction ->
+            let
+                ( cx, cy ) =
+                    canvasXY g c
+
+                ( dx, dy ) =
+                    Cell.dxdy direction g.animationDelta ( cx, cy )
+            in
             Cell.size
                 // 2
                 |> toFloat
                 |> C.circle
                 |> C.filled c.color
-                |> C.move (canvasXY g c)
+                |> C.move ( dx, dy )
 
         Border ->
             renderBlock g c
 
         Player ->
-            renderBlock g c
-
-        Space ->
             renderBlock g c
 
         Trail ->
@@ -89,13 +93,13 @@ canvasXY g c =
         boardH =
             boardHeight g
     in
-        ( ((boardW // 2) - boardW)
-            + (c.cellX * Cell.size)
-            + (Cell.size // 2)
-            |> toFloat
-        , boardH
-            - (boardH // 2)
-            - (c.cellY * Cell.size)
-            - (Cell.size // 2)
-            |> toFloat
-        )
+    ( ((boardW // 2) - boardW)
+        + (c.cellX * Cell.size)
+        + (Cell.size // 2)
+        |> toFloat
+    , boardH
+        - (boardH // 2)
+        - (c.cellY * Cell.size)
+        - (Cell.size // 2)
+        |> toFloat
+    )
