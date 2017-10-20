@@ -3,7 +3,7 @@ module Main exposing (..)
 import AnimationFrame as AF
 import Html
 import Keyboard exposing (KeyCode)
-import Model exposing (KeyName(..), KeyState(..), Model, Msg(..))
+import Model exposing (GameState(..), KeyName(..), KeyState(..), Model, Msg(..))
 import Update
 import View
 import Window as W
@@ -24,13 +24,16 @@ main =
 {-| Subscriptions
 -}
 subscriptions : Model -> Sub Msg
-subscriptions m =
-    Sub.batch
-        [ W.resizes WindowResize
-        , AF.times SystemTick
-        , Keyboard.downs (key KeyPressed)
-        , Keyboard.ups (key KeyNotPressed)
-        ]
+subscriptions model =
+    if model.game == Playing then
+        Sub.batch
+            [ W.resizes WindowResize
+            , AF.times SystemTick
+            , Keyboard.downs (key KeyPressed)
+            , Keyboard.ups (key KeyNotPressed)
+            ]
+    else
+        Sub.none
 
 
 key : KeyState -> KeyCode -> Msg

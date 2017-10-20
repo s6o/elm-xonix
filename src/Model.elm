@@ -1,6 +1,7 @@
 module Model
     exposing
-        ( KeyName(..)
+        ( GameState(..)
+        , KeyName(..)
         , KeyState(..)
         , Model
         , Msg(..)
@@ -10,6 +11,11 @@ import Cell exposing (Cell)
 import Grid exposing (Grid)
 import Time exposing (Time)
 import Window as W
+
+
+type GameState
+    = Paused
+    | Playing
 
 
 type KeyName
@@ -25,7 +31,11 @@ type KeyState
 
 
 type alias Model =
-    { grid : Grid
+    { game : GameState
+    , grid : Grid
+    , level : Int
+    , lives : Int
+    , score : Int
     , systemTick : Time
     , wsize : Maybe W.Size
     }
@@ -34,6 +44,9 @@ type alias Model =
 type Msg
     = NoOp
     | Key KeyName KeyState
+    | LevelDown
+    | LevelUp
+    | PauseResume
     | PlaceBalls (List (Maybe Cell))
     | SystemTick Time
     | WindowResize W.Size

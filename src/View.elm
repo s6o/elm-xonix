@@ -8,7 +8,9 @@ import Collage as C exposing (Form)
 import Dict
 import Element as E
 import Grid exposing (Grid)
-import Html exposing (Html, text)
+import Html exposing (Html, button, div, text)
+import Html.Attributes exposing (style)
+import Html.Events exposing (onClick)
 import Html.Lazy exposing (lazy2)
 import Model exposing (Model, Msg(..))
 import Window as W
@@ -17,7 +19,91 @@ import Window as W
 view : Model -> Html Msg
 view model =
     model.wsize
-        |> Maybe.map (\ws -> lazy2 render ws model.grid)
+        |> Maybe.map
+            (\ws ->
+                div
+                    [ style
+                        [ ( "width", toString ws.width ++ "px" )
+                        , ( "height", toString ws.height ++ "px" )
+                        , ( "overflow", "hidden" )
+                        , ( "position", "relative" )
+                        ]
+                    ]
+                    [ div
+                        [ style
+                            [ ( "position", "absolute" )
+                            , ( "top", "50%" )
+                            , ( "left", "50%" )
+                            , ( "transform", "translate(-50%, -50%)" )
+                            ]
+                        ]
+                        [ div
+                            [ style
+                                [ ( "width", "100%" )
+                                ]
+                            ]
+                            [ div
+                                [ style
+                                    [ ( "width", "15%" )
+                                    , ( "float", "left" )
+                                    , ( "padding-bottom", "5px" )
+                                    ]
+                                ]
+                                [ "Level: "
+                                    ++ toString model.level
+                                    |> text
+                                ]
+                            , div
+                                [ style
+                                    [ ( "width", "15%" )
+                                    , ( "float", "left" )
+                                    , ( "padding-bottom", "5px" )
+                                    ]
+                                ]
+                                [ "Lives: "
+                                    ++ toString model.lives
+                                    |> text
+                                ]
+                            , div
+                                [ style
+                                    [ ( "width", "15%" )
+                                    , ( "float", "left" )
+                                    , ( "padding-bottom", "5px" )
+                                    ]
+                                ]
+                                [ "Score: "
+                                    ++ toString model.score
+                                    |> text
+                                ]
+                            , div
+                                [ style
+                                    [ ( "width", "55%" )
+                                    , ( "float", "left" )
+                                    , ( "padding-bottom", "5px" )
+                                    , ( "text-align", "right" )
+                                    ]
+                                ]
+                                [ button
+                                    [ onClick LevelDown
+                                    ]
+                                    [ text "Level Down"
+                                    ]
+                                , button
+                                    [ onClick LevelUp
+                                    ]
+                                    [ text "Level Up"
+                                    ]
+                                , button
+                                    [ onClick PauseResume
+                                    ]
+                                    [ text "Pause/Resume"
+                                    ]
+                                ]
+                            ]
+                        , lazy2 render ws model.grid
+                        ]
+                    ]
+            )
         |> Maybe.withDefault (text "Waiting for Window size ...")
 
 
@@ -36,7 +122,7 @@ render ws g =
     [ renderGrid g
     ]
         |> C.collage (boardWidth g) (boardHeight g)
-        |> E.container ws.width ws.height E.middle
+        |> E.container (boardWidth g) (boardHeight g) E.middle
         |> E.toHtml
 
 
