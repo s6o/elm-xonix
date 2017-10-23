@@ -34,7 +34,7 @@ type alias Grid =
     , balls : List (Maybe Cell)
     , cells : Dict ( Int, Int ) (Maybe Cell)
     , colors : Colors
-    , player : Maybe ( Int, Int )
+    , player : Maybe Cell
     , size : Size
     }
 
@@ -108,6 +108,7 @@ init level posMsg =
                 |> (\g -> xBorder (g.size.height - 1) g)
                 |> yBorder 0
                 |> (\g -> yBorder (g.size.width - 1) g)
+                |> initPlayer
     in
     ( grid
     , initBalls level grid
@@ -140,6 +141,32 @@ initAnimation systemTick grid =
     { grid
         | animation = Just a
         , animationDelta = Animation.animate systemTick a
+    }
+
+
+initPlayer : Grid -> Grid
+initPlayer grid =
+    let
+        px =
+            grid.size.width // 2
+
+        py =
+            grid.size.height - 1
+
+        priorCell =
+            Dict.get ( px, py ) grid.cells
+                |> EMaybe.join
+
+        player =
+            Cell.player grid.colors.player px py
+    in
+    { grid
+        | cells =
+            Dict.update
+                ( px, py )
+                (\_ -> Just <| Just player)
+                grid.cells
+        , player = priorCell
     }
 
 
