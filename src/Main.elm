@@ -3,7 +3,9 @@ module Main exposing (..)
 import AnimationFrame as AF
 import Html
 import Keyboard exposing (KeyCode)
-import Model exposing (GameState(..), KeyName(..), KeyState(..), Model, Msg(..))
+import Keys exposing (KeyName(..), KeyState(..))
+import Messages exposing (Msg(..))
+import Model exposing (GameState(..), Model)
 import Update
 import View
 import Window as W
@@ -42,14 +44,14 @@ key keyState keyCode =
         37 ->
             Key KeyArrowLeft keyState
 
+        38 ->
+            Key KeyArrowUp keyState
+
         39 ->
             Key KeyArrowRight keyState
 
         40 ->
             Key KeyArrowDown keyState
-
-        38 ->
-            Key KeyArrowUp keyState
 
         _ ->
             NoOp

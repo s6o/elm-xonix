@@ -7,6 +7,7 @@ module Grid
         , inAnimation
         , init
         , initAnimation
+        , movePlayer
         , nextBallPositions
         , update
         )
@@ -15,6 +16,7 @@ import Animation exposing (Animation)
 import Cell exposing (Cell, Direction(..), Shape(..))
 import Color exposing (Color)
 import Dict exposing (Dict)
+import Keys exposing (KeyName(..))
 import Maybe.Extra as EMaybe
 import Random exposing (Generator, Seed)
 import Task exposing (Task)
@@ -27,6 +29,9 @@ the next game state.
 The game grid coordinate (0,0) is top/left corner, both axis contain only
 positive values.
 
+The `priorPlayer` keeps the shape/color before active player position was updated
+to that position, but the grid coordinates match also the current player position.
+
 -}
 type alias Grid =
     { animation : Maybe Animation
@@ -34,7 +39,7 @@ type alias Grid =
     , balls : List (Maybe Cell)
     , cells : Dict ( Int, Int ) (Maybe Cell)
     , colors : Colors
-    , player : Maybe Cell
+    , priorPlayer : ( ( Int, Int ), Maybe Cell )
     , size : Size
     }
 
@@ -91,7 +96,7 @@ empty =
         , space = Color.white
         , trail = Color.darkYellow
         }
-    , player = Nothing
+    , priorPlayer = ( ( -1, -1 ), Nothing )
     , size = { height = 46, width = 64 }
     }
 
@@ -166,8 +171,47 @@ initPlayer grid =
                 ( px, py )
                 (\_ -> Just <| Just player)
                 grid.cells
-        , player = priorCell
+        , priorPlayer = ( ( px, py ), priorCell )
     }
+
+
+movePlayer : KeyName -> Grid -> Grid
+movePlayer keyName grid =
+    let
+        ( ( cx, cy ), pc ) =
+            grid.priorPlayer
+
+        ( px, py ) =
+            case keyName of
+                KeyArrowDown ->
+                    ( cx, cy + 1 )
+
+                KeyArrowLeft ->
+                    ( cx - 1, cy )
+
+                KeyArrowRight ->
+                    ( cx + 1, cy )
+
+                KeyArrowUp ->
+                    ( cx, cy - 1 )
+    in
+    if Dict.member ( px, py ) grid.cells then
+        let
+            priorCell =
+                Dict.get ( px, py ) grid.cells
+                    |> EMaybe.join
+        in
+        { grid
+            | cells =
+                grid.cells
+                    |> Dict.update ( cx, cy ) (\_ -> Just <| pc)
+                    |> Dict.update
+                        ( px, py )
+                        (\_ -> Just <| Just <| Cell.player grid.colors.player px py)
+            , priorPlayer = ( ( px, py ), priorCell )
+        }
+    else
+        grid
 
 
 nextBallPositions : Grid -> List (Maybe Cell)
@@ -439,7 +483,7 @@ space : Grid -> Grid
 space g =
     List.repeat (g.size.height - 2) Nothing
         |> List.repeat (g.size.width - 2)
-        |> List.indexedMap (\x cols -> List.indexedMap (\y _ -> ( x, y )) cols)
+        |> List.indexedMap (\x cols -> List.indexedMap (\y _ -> ( x + 1, y + 1 )) cols)
         |> List.concat
         |> List.foldl (\( x, y ) -> Dict.insert ( x, y ) Nothing) g.cells
         |> (\newCells -> { g | cells = newCells })

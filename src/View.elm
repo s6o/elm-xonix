@@ -12,7 +12,8 @@ import Html exposing (Html, button, div, text)
 import Html.Attributes exposing (style)
 import Html.Events exposing (onClick)
 import Html.Lazy exposing (lazy2)
-import Model exposing (Model, Msg(..))
+import Messages exposing (Msg(..))
+import Model exposing (Model)
 import Window as W
 
 

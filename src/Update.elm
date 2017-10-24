@@ -5,13 +5,12 @@ module Update
         )
 
 import Grid
+import Keys exposing (KeyName, KeyState(..))
+import Messages exposing (Msg(..))
 import Model
     exposing
         ( GameState(..)
-        , KeyName(..)
-        , KeyState(..)
         , Model
-        , Msg(..)
         )
 import Task exposing (Task)
 import Window as W
@@ -47,7 +46,16 @@ update msg model =
             )
 
         Key keyName keyState ->
-            keyUpdate model keyName keyState
+            case keyState of
+                KeyNotPressed ->
+                    ( model
+                    , Cmd.none
+                    )
+
+                KeyPressed ->
+                    ( { model | grid = Grid.movePlayer keyName model.grid }
+                    , Cmd.none
+                    )
 
         LevelDown ->
             if model.level - 1 >= 1 then
@@ -118,20 +126,6 @@ update msg model =
             ( { model | wsize = Just ws }
             , Cmd.none
             )
-
-
-{-| @private
--}
-keyUpdate : Model -> KeyName -> KeyState -> ( Model, Cmd Msg )
-keyUpdate model keyName keyState =
-    if keyState == KeyNotPressed then
-        ( model
-        , Cmd.none
-        )
-    else
-        ( model
-        , Cmd.none
-        )
 
 
 {-| @private
