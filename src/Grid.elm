@@ -200,11 +200,17 @@ movePlayer keyName grid =
             priorCell =
                 Dict.get ( px, py ) grid.cells
                     |> EMaybe.join
+
+            restoreCell =
+                if Cell.isSpace pc then
+                    Cell.trail grid.colors.trail cx cy |> Just
+                else
+                    pc
         in
         { grid
             | cells =
                 grid.cells
-                    |> Dict.update ( cx, cy ) (\_ -> Just <| pc)
+                    |> Dict.update ( cx, cy ) (\_ -> Just <| restoreCell)
                     |> Dict.update
                         ( px, py )
                         (\_ -> Just <| Just <| Cell.player grid.colors.player px py)
