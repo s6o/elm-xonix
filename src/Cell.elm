@@ -8,7 +8,9 @@ module Cell
         , direction
         , dxdy
         , equal
+        , isBorder
         , isSpace
+        , isTrail
         , player
         , size
         , trail
@@ -128,6 +130,16 @@ equal s1 s2 =
             False
 
 
+isBorder : Maybe Cell -> Bool
+isBorder mc =
+    case mc of
+        Just c ->
+            c.shape == Border
+
+        _ ->
+            False
+
+
 isSpace : Maybe Cell -> Bool
 isSpace mc =
     case mc of
@@ -135,6 +147,16 @@ isSpace mc =
             True
 
         Just _ ->
+            False
+
+
+isTrail : Maybe Cell -> Bool
+isTrail mc =
+    case mc of
+        Just c ->
+            c.shape == Trail
+
+        _ ->
             False
 
 
