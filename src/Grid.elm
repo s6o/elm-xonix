@@ -19,6 +19,7 @@ import Dict exposing (Dict)
 import Keys exposing (KeyName(..))
 import Maybe.Extra as EMaybe
 import Random exposing (Generator, Seed)
+import Set exposing (Set)
 import Task exposing (Task)
 import Time exposing (Time)
 
@@ -41,6 +42,9 @@ type alias Grid =
     , colors : Colors
     , priorPlayer : ( ( Int, Int ), Maybe Cell )
     , size : Size
+    , trail : Set ( Int, Int )
+    , trailLeft : Set ( Int, Int )
+    , trailRight : Set ( Int, Int )
     }
 
 
@@ -98,6 +102,9 @@ empty =
         }
     , priorPlayer = ( ( -1, -1 ), Nothing )
     , size = { height = 46, width = 64 }
+    , trail = Set.empty
+    , trailLeft = Set.empty
+    , trailRight = Set.empty
     }
 
 
