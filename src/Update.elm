@@ -25,7 +25,8 @@ init =
     ( { game = Playing
       , grid = g
       , level = 1
-      , lives = 3
+      , levelFill = 0
+      , lives = Model.maxLives
       , score = 0
       , systemTick = 0
       , wsize = Nothing
@@ -53,8 +54,12 @@ update msg model =
                     )
 
                 KeyPressed ->
-                    ( { model | grid = Grid.movePlayer keyName model.grid }
-                    , Cmd.none
+                    let
+                        ( nextGrid, nextCmd ) =
+                            Grid.movePlayer keyName model.grid
+                    in
+                    ( { model | grid = nextGrid }
+                    , nextCmd
                     )
 
         LevelDown ->
@@ -73,6 +78,15 @@ update msg model =
                 , Cmd.none
                 )
 
+        NewGame ->
+            let
+                ( g, gc ) =
+                    Grid.init 1 PlaceBalls
+            in
+            ( { model | game = Playing, grid = g, level = 1, lives = Model.maxLives }
+            , gc
+            )
+
         PauseResume ->
             let
                 newState =
@@ -82,6 +96,9 @@ update msg model =
 
                         Playing ->
                             Paused
+
+                        _ ->
+                            model.game
             in
             ( { model | game = newState }
             , Cmd.none
@@ -119,6 +136,23 @@ update msg model =
                 )
             else
                 ( model
+                , Cmd.none
+                )
+
+        TakeLife ->
+            if model.lives - 1 >= 1 then
+                ( { model
+                    | grid = Grid.clearTrail model.grid
+                    , lives = model.lives - 1
+                  }
+                , Cmd.none
+                )
+            else
+                ( { model
+                    | game = Stopped
+                    , grid = Grid.clearTrail model.grid
+                    , lives = 0
+                  }
                 , Cmd.none
                 )
 

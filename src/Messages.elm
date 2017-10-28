@@ -14,7 +14,9 @@ type Msg
     | Key KeyName KeyState
     | LevelDown
     | LevelUp
+    | NewGame
     | PauseResume
     | PlaceBalls (List (Maybe Cell))
     | SystemTick Time
+    | TakeLife
     | WindowResize Size

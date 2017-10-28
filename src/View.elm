@@ -9,11 +9,11 @@ import Dict
 import Element as E
 import Grid exposing (Grid)
 import Html exposing (Html, button, div, text)
-import Html.Attributes exposing (style)
+import Html.Attributes exposing (disabled, style)
 import Html.Events exposing (onClick)
 import Html.Lazy exposing (lazy2)
 import Messages exposing (Msg(..))
-import Model exposing (Model)
+import Model exposing (GameState(..), Model)
 import Window as W
 
 
@@ -78,7 +78,18 @@ view model =
                                 ]
                             , div
                                 [ style
-                                    [ ( "width", "55%" )
+                                    [ ( "width", "20%" )
+                                    , ( "float", "left" )
+                                    , ( "padding-bottom", "5px" )
+                                    ]
+                                ]
+                                [ toString model.levelFill
+                                    |> (\v -> "Captured: " ++ v ++ " %")
+                                    |> text
+                                ]
+                            , div
+                                [ style
+                                    [ ( "width", "35%" )
                                     , ( "float", "left" )
                                     , ( "padding-bottom", "5px" )
                                     , ( "text-align", "right" )
@@ -86,22 +97,59 @@ view model =
                                 ]
                                 [ button
                                     [ onClick LevelDown
+                                    , style
+                                        [ ( "margin-right", "5px" )
+                                        , ( "width", "90px" )
+                                        ]
                                     ]
                                     [ text "Level Down"
                                     ]
                                 , button
                                     [ onClick LevelUp
+                                    , style [ ( "width", "90px" ) ]
                                     ]
                                     [ text "Level Up"
-                                    ]
-                                , button
-                                    [ onClick PauseResume
-                                    ]
-                                    [ text "Pause/Resume"
                                     ]
                                 ]
                             ]
                         , lazy2 render ws model.grid
+                        , div
+                            [ style
+                                [ ( "width", "100%" )
+                                , ( "text-align", "right" )
+                                , ( "padding-top", "5px" )
+                                ]
+                            ]
+                            [ button
+                                [ onClick PauseResume
+                                , disabled (model.game == Stopped)
+                                , style
+                                    [ ( "margin-right", "5px" )
+                                    , ( "width", "90px" )
+                                    ]
+                                ]
+                                [ (case model.game of
+                                    Paused ->
+                                        "Resume"
+
+                                    Playing ->
+                                        "Pause"
+
+                                    Stopped ->
+                                        "Game Over"
+                                  )
+                                    |> text
+                                ]
+                            , button
+                                [ onClick NewGame
+                                , disabled (model.game /= Stopped)
+                                , style
+                                    [ ( "width", "90px" )
+                                    ]
+                                ]
+                                [ text "New Game"
+                                ]
+                            ]
                         ]
                     ]
             )

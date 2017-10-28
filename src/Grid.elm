@@ -4,6 +4,7 @@ module Grid
         , Grid
         , Size
         , animate
+        , clearTrail
         , inAnimation
         , init
         , initAnimation
@@ -18,6 +19,7 @@ import Color exposing (Color)
 import Dict exposing (Dict)
 import Keys exposing (KeyName(..))
 import Maybe.Extra as EMaybe
+import Messages exposing (Msg(..))
 import Random exposing (Generator, Seed)
 import Set exposing (Set)
 import Task exposing (Task)
@@ -75,6 +77,24 @@ animate systemTick grid =
                 |> Maybe.map (\a -> Animation.animate systemTick a)
                 |> Maybe.withDefault 0
     }
+
+
+clearTrail : Grid -> Grid
+clearTrail grid =
+    let
+        ( ( px, py ), _ ) =
+            grid.priorPlayer
+    in
+    { grid
+        | cells =
+            grid.trail
+                |> Set.foldl
+                    (\( x, y ) accum -> Dict.insert ( x, y ) Nothing accum)
+                    grid.cells
+                |> (\cells -> Dict.insert ( px, py ) Nothing cells)
+        , trail = Set.empty
+    }
+        |> initPlayer
 
 
 inAnimation : Time -> Grid -> Bool
@@ -182,7 +202,7 @@ initPlayer grid =
     }
 
 
-movePlayer : KeyName -> Grid -> Grid
+movePlayer : KeyName -> Grid -> ( Grid, Cmd Msg )
 movePlayer keyName grid =
     let
         ( ( cx, cy ), pc ) =
@@ -208,23 +228,38 @@ movePlayer keyName grid =
                 Dict.get ( px, py ) grid.cells
                     |> EMaybe.join
 
-            restoreCell =
+            ( restoreCell, updatedTrail ) =
                 if Cell.isSpace pc then
-                    Cell.trail grid.colors.trail cx cy |> Just
+                    ( Cell.trail grid.colors.trail cx cy |> Just
+                    , Set.insert ( cx, cy ) grid.trail
+                    )
                 else
-                    pc
+                    ( pc
+                    , grid.trail
+                    )
         in
-        { grid
-            | cells =
-                grid.cells
-                    |> Dict.update ( cx, cy ) (\_ -> Just <| restoreCell)
-                    |> Dict.update
-                        ( px, py )
-                        (\_ -> Just <| Just <| Cell.player grid.colors.player px py)
-            , priorPlayer = ( ( px, py ), priorCell )
-        }
+        if Cell.isTrail priorCell || (Cell.isSpace pc && Set.isEmpty grid.trail) then
+            ( grid
+            , Task.succeed TakeLife
+                |> Task.perform identity
+            )
+        else
+            ( { grid
+                | cells =
+                    grid.cells
+                        |> Dict.update ( cx, cy ) (\_ -> Just <| restoreCell)
+                        |> Dict.update
+                            ( px, py )
+                            (\_ -> Just <| Just <| Cell.player grid.colors.player px py)
+                , priorPlayer = ( ( px, py ), priorCell )
+                , trail = updatedTrail
+              }
+            , Cmd.none
+            )
     else
-        grid
+        ( grid
+        , Cmd.none
+        )
 
 
 nextBallPositions : Grid -> List (Maybe Cell)
