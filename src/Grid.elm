@@ -97,13 +97,6 @@ clearTrail grid =
         |> initPlayer
 
 
-inAnimation : Time -> Grid -> Bool
-inAnimation systemTick grid =
-    grid.animation
-        |> Maybe.map (\a -> Animation.isDone systemTick a |> not)
-        |> Maybe.withDefault False
-
-
 {-| @private
 Create an empty grid with specified size: height/width
 -}
@@ -126,6 +119,13 @@ empty =
     , trailLeft = Set.empty
     , trailRight = Set.empty
     }
+
+
+inAnimation : Time -> Grid -> Bool
+inAnimation systemTick grid =
+    grid.animation
+        |> Maybe.map (\a -> Animation.isDone systemTick a |> not)
+        |> Maybe.withDefault False
 
 
 {-| Initialize game grid for a given level.
@@ -200,6 +200,20 @@ initPlayer grid =
                 grid.cells
         , priorPlayer = ( ( px, py ), priorCell )
     }
+
+
+{-| @private
+Initialize a given number of ball positions.
+-}
+initBalls : Int -> Grid -> Task x ( List ( Int, Int ), Seed )
+initBalls count g =
+    Time.now
+        |> Task.map
+            (\t ->
+                Basics.round t
+                    |> Random.initialSeed
+                    |> Random.step (positionGenerator count g)
+            )
 
 
 movePlayer : KeyName -> Grid -> ( Grid, Cmd Msg )
@@ -397,66 +411,6 @@ nextBallSW grid c =
         { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
 
 
-{-| Partition and update `Cell`s in `Shape` clusters.
--}
-update : Grid -> List (Maybe Cell) -> Grid
-update grid cells =
-    [ Ball NE
-    , Border
-    , Player
-    , Trail
-    ]
-        |> List.map
-            (\shape ->
-                cells
-                    |> List.filter
-                        (\c ->
-                            Maybe.map (\cell -> Cell.equal shape cell.shape) c
-                                |> Maybe.withDefault False
-                        )
-            )
-        |> List.foldl
-            (\sameCells g ->
-                case
-                    List.head sameCells
-                        |> EMaybe.join
-                        |> Maybe.map .shape
-                of
-                    Nothing ->
-                        g
-
-                    Just (Ball direction) ->
-                        shapePositions (Ball direction) g
-                            |> setToSpace g
-                            |> setToCell sameCells
-                            |> (\ng -> { ng | balls = sameCells })
-
-                    Just Border ->
-                        g
-
-                    Just Player ->
-                        g
-
-                    Just Trail ->
-                        g
-            )
-            grid
-
-
-{-| @private
-Initialize a given number of ball positions.
--}
-initBalls : Int -> Grid -> Task x ( List ( Int, Int ), Seed )
-initBalls count g =
-    Time.now
-        |> Task.map
-            (\t ->
-                Basics.round t
-                    |> Random.initialSeed
-                    |> Random.step (positionGenerator count g)
-            )
-
-
 {-| @private
 Given a count generate number of random `Grid` coordinates for placeing game objects.
 -}
@@ -535,6 +489,52 @@ space g =
         |> List.concat
         |> List.foldl (\( x, y ) -> Dict.insert ( x, y ) Nothing) g.cells
         |> (\newCells -> { g | cells = newCells })
+
+
+{-| Partition and update `Cell`s in `Shape` clusters.
+-}
+update : Grid -> List (Maybe Cell) -> Grid
+update grid cells =
+    [ Ball NE
+    , Border
+    , Player
+    , Trail
+    ]
+        |> List.map
+            (\shape ->
+                cells
+                    |> List.filter
+                        (\c ->
+                            Maybe.map (\cell -> Cell.equal shape cell.shape) c
+                                |> Maybe.withDefault False
+                        )
+            )
+        |> List.foldl
+            (\sameCells g ->
+                case
+                    List.head sameCells
+                        |> EMaybe.join
+                        |> Maybe.map .shape
+                of
+                    Nothing ->
+                        g
+
+                    Just (Ball direction) ->
+                        shapePositions (Ball direction) g
+                            |> setToSpace g
+                            |> setToCell sameCells
+                            |> (\ng -> { ng | balls = sameCells })
+
+                    Just Border ->
+                        g
+
+                    Just Player ->
+                        g
+
+                    Just Trail ->
+                        g
+            )
+            grid
 
 
 {-| @private
