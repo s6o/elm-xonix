@@ -9,6 +9,7 @@ module Cell
         , dxdy
         , equal
         , isBorder
+        , isPlayer
         , isSpace
         , isTrail
         , player
@@ -135,6 +136,16 @@ isBorder mc =
     case mc of
         Just c ->
             c.shape == Border
+
+        _ ->
+            False
+
+
+isPlayer : Maybe Cell -> Bool
+isPlayer mc =
+    case mc of
+        Just c ->
+            c.shape == Player
 
         _ ->
             False

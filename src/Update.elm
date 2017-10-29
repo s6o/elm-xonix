@@ -121,6 +121,9 @@ update msg model =
         SystemTick t ->
             if model.game == Playing then
                 let
+                    ( nextBallPos, nextCmd ) =
+                        Grid.nextBallPositions model.grid
+
                     newModel =
                         if Grid.inAnimation t model.grid then
                             { model
@@ -130,14 +133,14 @@ update msg model =
                         else
                             { model
                                 | grid =
-                                    Grid.nextBallPositions model.grid
+                                    nextBallPos
                                         |> Grid.update model.grid
                                         |> Grid.initAnimation t
                                 , systemTick = t
                             }
                 in
                 ( newModel
-                , Cmd.none
+                , nextCmd
                 )
             else
                 ( model

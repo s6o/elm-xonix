@@ -291,7 +291,7 @@ movePlayer keyName grid =
         )
 
 
-nextBallPositions : Grid -> List (Maybe Cell)
+nextBallPositions : Grid -> ( List (Maybe Cell), Cmd Msg )
 nextBallPositions grid =
     grid.balls
         |> List.map
@@ -313,14 +313,29 @@ nextBallPositions grid =
                                     nextBallSW grid c
 
                         _ ->
-                            c
+                            ( c, Cmd.none )
                 )
             )
+        |> List.foldl
+            (\mc ( balls, finalCmd ) ->
+                ( (mc |> Maybe.map (\( c, _ ) -> c)) :: balls
+                , mc
+                    |> Maybe.map
+                        (\( _, cmd ) ->
+                            if finalCmd == Cmd.none && cmd /= Cmd.none then
+                                cmd
+                            else
+                                finalCmd
+                        )
+                    |> Maybe.withDefault Cmd.none
+                )
+            )
+            ( [], Cmd.none )
 
 
 {-| @private
 -}
-nextBallNE : Grid -> Cell -> Cell
+nextBallNE : Grid -> Cell -> ( Cell, Cmd Msg )
 nextBallNE grid c =
     let
         nextCell =
@@ -335,19 +350,35 @@ nextBallNE grid c =
             Dict.get ( c.cellX + 1, c.cellY + 1 ) grid.cells
                 |> EMaybe.join
     in
-    if Cell.isSpace nextCell then
-        { c | cellX = c.cellX + 1, cellY = c.cellY - 1 }
-    else if Cell.isSpace leftCell then
-        { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
-    else if Cell.isSpace rightCell then
-        { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
-    else
-        { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
+    case Cell.isTrail nextCell || Cell.isPlayer nextCell of
+        False ->
+            if Cell.isSpace nextCell then
+                ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1 }
+                , Cmd.none
+                )
+            else if Cell.isSpace leftCell then
+                ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
+                , Cmd.none
+                )
+            else if Cell.isSpace rightCell then
+                ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
+                , Cmd.none
+                )
+            else
+                ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
+                , Cmd.none
+                )
+
+        True ->
+            ( c
+            , Task.succeed TakeLife
+                |> Task.perform identity
+            )
 
 
 {-| @private
 -}
-nextBallNW : Grid -> Cell -> Cell
+nextBallNW : Grid -> Cell -> ( Cell, Cmd Msg )
 nextBallNW grid c =
     let
         nextCell =
@@ -362,19 +393,35 @@ nextBallNW grid c =
             Dict.get ( c.cellX + 1, c.cellY - 1 ) grid.cells
                 |> EMaybe.join
     in
-    if Cell.isSpace nextCell then
-        { c | cellX = c.cellX - 1, cellY = c.cellY - 1 }
-    else if Cell.isSpace leftCell then
-        { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
-    else if Cell.isSpace rightCell then
-        { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
-    else
-        { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
+    case Cell.isTrail nextCell || Cell.isPlayer nextCell of
+        False ->
+            if Cell.isSpace nextCell then
+                ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1 }
+                , Cmd.none
+                )
+            else if Cell.isSpace leftCell then
+                ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
+                , Cmd.none
+                )
+            else if Cell.isSpace rightCell then
+                ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
+                , Cmd.none
+                )
+            else
+                ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
+                , Cmd.none
+                )
+
+        True ->
+            ( c
+            , Task.succeed TakeLife
+                |> Task.perform identity
+            )
 
 
 {-| @private
 -}
-nextBallSE : Grid -> Cell -> Cell
+nextBallSE : Grid -> Cell -> ( Cell, Cmd Msg )
 nextBallSE grid c =
     let
         nextCell =
@@ -389,19 +436,35 @@ nextBallSE grid c =
             Dict.get ( c.cellX - 1, c.cellY + 1 ) grid.cells
                 |> EMaybe.join
     in
-    if Cell.isSpace nextCell then
-        { c | cellX = c.cellX + 1, cellY = c.cellY + 1 }
-    else if Cell.isSpace leftCell then
-        { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
-    else if Cell.isSpace rightCell then
-        { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
-    else
-        { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
+    case Cell.isTrail nextCell || Cell.isPlayer nextCell of
+        False ->
+            if Cell.isSpace nextCell then
+                ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1 }
+                , Cmd.none
+                )
+            else if Cell.isSpace leftCell then
+                ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
+                , Cmd.none
+                )
+            else if Cell.isSpace rightCell then
+                ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
+                , Cmd.none
+                )
+            else
+                ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
+                , Cmd.none
+                )
+
+        True ->
+            ( c
+            , Task.succeed TakeLife
+                |> Task.perform identity
+            )
 
 
 {-| @private
 -}
-nextBallSW : Grid -> Cell -> Cell
+nextBallSW : Grid -> Cell -> ( Cell, Cmd Msg )
 nextBallSW grid c =
     let
         nextCell =
@@ -416,14 +479,30 @@ nextBallSW grid c =
             Dict.get ( c.cellX - 1, c.cellY - 1 ) grid.cells
                 |> EMaybe.join
     in
-    if Cell.isSpace nextCell then
-        { c | cellX = c.cellX - 1, cellY = c.cellY + 1 }
-    else if Cell.isSpace leftCell then
-        { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
-    else if Cell.isSpace rightCell then
-        { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
-    else
-        { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
+    case Cell.isTrail nextCell || Cell.isPlayer nextCell of
+        False ->
+            if Cell.isSpace nextCell then
+                ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1 }
+                , Cmd.none
+                )
+            else if Cell.isSpace leftCell then
+                ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
+                , Cmd.none
+                )
+            else if Cell.isSpace rightCell then
+                ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
+                , Cmd.none
+                )
+            else
+                ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
+                , Cmd.none
+                )
+
+        True ->
+            ( c
+            , Task.succeed TakeLife
+                |> Task.perform identity
+            )
 
 
 {-| @private
