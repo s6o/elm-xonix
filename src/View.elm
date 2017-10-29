@@ -96,19 +96,33 @@ view model =
                                     ]
                                 ]
                                 [ button
-                                    [ onClick LevelDown
+                                    [ onClick PauseResume
+                                    , disabled (model.game == Stopped)
                                     , style
                                         [ ( "margin-right", "5px" )
                                         , ( "width", "90px" )
                                         ]
                                     ]
-                                    [ text "Level Down"
+                                    [ (case model.game of
+                                        Paused ->
+                                            "Resume"
+
+                                        Playing ->
+                                            "Pause"
+
+                                        Stopped ->
+                                            "Game Over"
+                                      )
+                                        |> text
                                     ]
                                 , button
-                                    [ onClick LevelUp
-                                    , style [ ( "width", "90px" ) ]
+                                    [ onClick NewGame
+                                    , disabled (model.game /= Stopped)
+                                    , style
+                                        [ ( "width", "90px" )
+                                        ]
                                     ]
-                                    [ text "Level Up"
+                                    [ text "New Game"
                                     ]
                                 ]
                             ]
@@ -121,33 +135,21 @@ view model =
                                 ]
                             ]
                             [ button
-                                [ onClick PauseResume
+                                [ onClick LevelDown
                                 , disabled (model.game == Stopped)
                                 , style
                                     [ ( "margin-right", "5px" )
                                     , ( "width", "90px" )
                                     ]
                                 ]
-                                [ (case model.game of
-                                    Paused ->
-                                        "Resume"
-
-                                    Playing ->
-                                        "Pause"
-
-                                    Stopped ->
-                                        "Game Over"
-                                  )
-                                    |> text
+                                [ text "Level Down"
                                 ]
                             , button
-                                [ onClick NewGame
-                                , disabled (model.game /= Stopped)
-                                , style
-                                    [ ( "width", "90px" )
-                                    ]
+                                [ onClick LevelUp
+                                , disabled (model.game == Stopped)
+                                , style [ ( "width", "90px" ) ]
                                 ]
-                                [ text "New Game"
+                                [ text "Level Up"
                                 ]
                             ]
                         ]
