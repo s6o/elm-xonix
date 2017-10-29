@@ -4,6 +4,7 @@ module Grid
         , Grid
         , Size
         , animate
+        , captureSpace
         , clearTrail
         , inAnimation
         , init
@@ -21,7 +22,6 @@ import Keys exposing (KeyName(..))
 import Maybe.Extra as EMaybe
 import Messages exposing (Msg(..))
 import Random exposing (Generator, Seed)
-import Set exposing (Set)
 import Task exposing (Task)
 import Time exposing (Time)
 
@@ -44,9 +44,7 @@ type alias Grid =
     , colors : Colors
     , priorPlayer : ( ( Int, Int ), Maybe Cell )
     , size : Size
-    , trail : Set ( Int, Int )
-    , trailLeft : Set ( Int, Int )
-    , trailRight : Set ( Int, Int )
+    , trail : List ( Int, Int, KeyName )
     }
 
 
@@ -79,6 +77,23 @@ animate systemTick grid =
     }
 
 
+captureSpace : Grid -> Grid
+captureSpace grid =
+    { grid
+        | cells =
+            grid.trail
+                |> List.foldl
+                    (\( x, y, _ ) accum ->
+                        Dict.insert
+                            ( x, y )
+                            (Cell.border grid.colors.border x y |> Just)
+                            accum
+                    )
+                    grid.cells
+        , trail = []
+    }
+
+
 clearTrail : Grid -> Grid
 clearTrail grid =
     let
@@ -88,11 +103,11 @@ clearTrail grid =
     { grid
         | cells =
             grid.trail
-                |> Set.foldl
-                    (\( x, y ) accum -> Dict.insert ( x, y ) Nothing accum)
+                |> List.foldl
+                    (\( x, y, _ ) accum -> Dict.insert ( x, y ) Nothing accum)
                     grid.cells
                 |> (\cells -> Dict.insert ( px, py ) Nothing cells)
-        , trail = Set.empty
+        , trail = []
     }
         |> initPlayer
 
@@ -115,9 +130,7 @@ empty =
         }
     , priorPlayer = ( ( -1, -1 ), Nothing )
     , size = { height = 46, width = 64 }
-    , trail = Set.empty
-    , trailLeft = Set.empty
-    , trailRight = Set.empty
+    , trail = []
     }
 
 
@@ -245,17 +258,16 @@ movePlayer keyName grid =
             ( restoreCell, updatedTrail ) =
                 if Cell.isSpace pc then
                     ( Cell.trail grid.colors.trail cx cy |> Just
-                    , Set.insert ( cx, cy ) grid.trail
+                    , ( cx, cy, keyName ) :: grid.trail
                     )
                 else
                     ( pc
                     , grid.trail
                     )
         in
-        if Cell.isTrail priorCell || (Cell.isSpace pc && Set.isEmpty grid.trail) then
+        if Cell.isTrail priorCell || (Cell.isSpace pc && Cell.isBorder priorCell && List.isEmpty grid.trail) then
             ( grid
-            , Task.succeed TakeLife
-                |> Task.perform identity
+            , Task.succeed TakeLife |> Task.perform identity
             )
         else
             ( { grid
@@ -268,7 +280,10 @@ movePlayer keyName grid =
                 , priorPlayer = ( ( px, py ), priorCell )
                 , trail = updatedTrail
               }
-            , Cmd.none
+            , if Cell.isBorder priorCell && not (List.isEmpty grid.trail) then
+                Task.succeed CaptureSpace |> Task.perform identity
+              else
+                Cmd.none
             )
     else
         ( grid

@@ -11,6 +11,7 @@ import Window exposing (Size)
 
 type Msg
     = NoOp
+    | CaptureSpace
     | Key KeyName KeyState
     | LevelDown
     | LevelUp

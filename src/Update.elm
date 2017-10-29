@@ -46,6 +46,11 @@ update msg model =
             , Cmd.none
             )
 
+        CaptureSpace ->
+            ( { model | grid = Grid.captureSpace model.grid }
+            , Cmd.none
+            )
+
         Key keyName keyState ->
             case keyState of
                 KeyNotPressed ->
