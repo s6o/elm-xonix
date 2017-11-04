@@ -5,6 +5,7 @@ module Cell
         , Shape(..)
         , ball
         , border
+        , conquest
         , direction
         , dxdy
         , equal
@@ -38,6 +39,7 @@ type Direction
 type Shape
     = Ball Direction
     | Border
+    | Conquest
     | Player
     | Trail
 
@@ -121,6 +123,9 @@ equal s1 s2 =
         ( Border, Border ) ->
             True
 
+        ( Conquest, Conquest ) ->
+            True
+
         ( Player, Player ) ->
             True
 
@@ -136,6 +141,16 @@ isBorder mc =
     case mc of
         Just c ->
             c.shape == Border
+
+        _ ->
+            False
+
+
+isConquest : Maybe Cell -> Bool
+isConquest mc =
+    case mc of
+        Just c ->
+            c.shape == Conquest
 
         _ ->
             False
@@ -169,6 +184,11 @@ isTrail mc =
 
         _ ->
             False
+
+
+conquest : Color -> Int -> Int -> Cell
+conquest c x y =
+    Cell x y c Conquest
 
 
 player : Color -> Int -> Int -> Cell

@@ -206,6 +206,9 @@ renderCell g c =
         Border ->
             renderBlock g c
 
+        Conquest ->
+            renderBlock g c
+
         Player ->
             renderBlock g c
 

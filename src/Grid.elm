@@ -53,6 +53,7 @@ type alias Grid =
 type alias Colors =
     { ball : Color
     , border : Color
+    , conquest : Color
     , player : Color
     , space : Color
     , trail : Color
@@ -86,7 +87,7 @@ captureSpace grid =
                     (\( x, y, _ ) accum ->
                         Dict.insert
                             ( x, y )
-                            (Cell.border grid.colors.border x y |> Just)
+                            (Cell.conquest grid.colors.conquest x y |> Just)
                             accum
                     )
                     grid.cells
@@ -124,6 +125,7 @@ empty =
     , colors =
         { ball = Color.orange
         , border = Color.lightBlue
+        , conquest = Color.blue
         , player = Color.darkRed
         , space = Color.white
         , trail = Color.darkYellow
@@ -591,6 +593,7 @@ update : Grid -> List (Maybe Cell) -> Grid
 update grid cells =
     [ Ball NE
     , Border
+    , Conquest
     , Player
     , Trail
     ]
@@ -620,6 +623,9 @@ update grid cells =
                             |> (\ng -> { ng | balls = sameCells })
 
                     Just Border ->
+                        g
+
+                    Just Conquest ->
                         g
 
                     Just Player ->
