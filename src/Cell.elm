@@ -10,6 +10,7 @@ module Cell
         , dxdy
         , equal
         , isBorder
+        , isConquest
         , isPlayer
         , isSpace
         , isTrail

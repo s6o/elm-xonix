@@ -288,8 +288,8 @@ movePlayer keyName grid =
                 , priorPlayer = ( ( px, py ), priorCell )
                 , trail = updatedTrail
               }
-            , if Cell.isBorder priorCell && not (List.isEmpty grid.trail) then
-                Task.succeed CaptureSpace |> Task.perform identity
+            , if (Cell.isBorder priorCell || Cell.isConquest priorCell) && not (List.isEmpty grid.trail) then
+                Task.succeed Conquer |> Task.perform identity
               else
                 Cmd.none
             )
