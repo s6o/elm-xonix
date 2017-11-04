@@ -80,6 +80,12 @@ animate systemTick grid =
 
 captureSpace : Grid -> Grid
 captureSpace grid =
+ballCollision : Maybe Cell -> ( ( Int, Int ), Maybe Cell ) -> Bool
+ballCollision nextCell priorCell =
+    Cell.isTrail nextCell
+        || (Cell.isPlayer nextCell && not (playerInsideBorder nextCell priorCell))
+
+
     { grid
         | cells =
             grid.trail
@@ -352,7 +358,7 @@ nextBallNE grid c =
             Dict.get ( c.cellX + 1, c.cellY + 1 ) grid.cells
                 |> EMaybe.join
     in
-    case Cell.isTrail nextCell || Cell.isPlayer nextCell of
+    case ballCollision nextCell grid.priorPlayer of
         False ->
             if Cell.isSpace nextCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1 }
@@ -395,7 +401,7 @@ nextBallNW grid c =
             Dict.get ( c.cellX + 1, c.cellY - 1 ) grid.cells
                 |> EMaybe.join
     in
-    case Cell.isTrail nextCell || Cell.isPlayer nextCell of
+    case ballCollision nextCell grid.priorPlayer of
         False ->
             if Cell.isSpace nextCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1 }
@@ -438,7 +444,7 @@ nextBallSE grid c =
             Dict.get ( c.cellX - 1, c.cellY + 1 ) grid.cells
                 |> EMaybe.join
     in
-    case Cell.isTrail nextCell || Cell.isPlayer nextCell of
+    case ballCollision nextCell grid.priorPlayer of
         False ->
             if Cell.isSpace nextCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1 }
@@ -481,7 +487,7 @@ nextBallSW grid c =
             Dict.get ( c.cellX - 1, c.cellY - 1 ) grid.cells
                 |> EMaybe.join
     in
-    case Cell.isTrail nextCell || Cell.isPlayer nextCell of
+    case ballCollision nextCell grid.priorPlayer of
         False ->
             if Cell.isSpace nextCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1 }
@@ -505,6 +511,21 @@ nextBallSW grid c =
             , Task.succeed TakeLife
                 |> Task.perform identity
             )
+
+
+{-| @private
+-}
+playerInsideBorder : Maybe Cell -> ( ( Int, Int ), Maybe Cell ) -> Bool
+playerInsideBorder nextCell ( _, priorCell ) =
+    case ( nextCell, priorCell ) of
+        ( Just c, Just pc ) ->
+            (c.shape == Player)
+                && (pc.shape == Border || pc.shape == Conquest)
+                && (c.cellX == pc.cellX)
+                && (c.cellY == pc.cellY)
+
+        _ ->
+            False
 
 
 {-| @private
