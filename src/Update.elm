@@ -46,8 +46,8 @@ update msg model =
             , Cmd.none
             )
 
-        CaptureSpace ->
-            ( { model | grid = Grid.captureSpace model.grid }
+        Conquer ->
+            ( { model | grid = Grid.conquer model.grid }
             , Cmd.none
             )
 

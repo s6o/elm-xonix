@@ -4,8 +4,8 @@ module Grid
         , Grid
         , Size
         , animate
-        , captureSpace
         , clearTrail
+        , conquer
         , inAnimation
         , init
         , initAnimation
@@ -22,6 +22,7 @@ import Keys exposing (KeyName(..))
 import Maybe.Extra as EMaybe
 import Messages exposing (Msg(..))
 import Random exposing (Generator, Seed)
+import Set exposing (Set)
 import Task exposing (Task)
 import Time exposing (Time)
 
@@ -78,14 +79,42 @@ animate systemTick grid =
     }
 
 
-captureSpace : Grid -> Grid
-captureSpace grid =
 ballCollision : Maybe Cell -> ( ( Int, Int ), Maybe Cell ) -> Bool
 ballCollision nextCell priorCell =
     Cell.isTrail nextCell
         || (Cell.isPlayer nextCell && not (playerInsideBorder nextCell priorCell))
 
 
+conquer : Grid -> Grid
+conquer grid =
+    conquerTrail grid
+        |> conquerSpace
+
+
+conquerSpace : Grid -> Grid
+conquerSpace grid =
+    let
+        outline =
+            Debug.log "outline cells" (findOutlineCells grid)
+
+        debugOutline =
+            Set.foldl
+                (\key accum ->
+                    case Dict.get key grid.cells |> EMaybe.join of
+                        Just c ->
+                            Dict.update key (\_ -> Just <| Just { c | color = Color.green }) accum
+
+                        Nothing ->
+                            accum
+                )
+                grid.cells
+                outline
+    in
+    { grid | cells = debugOutline }
+
+
+conquerTrail : Grid -> Grid
+conquerTrail grid =
     { grid
         | cells =
             grid.trail
@@ -140,6 +169,54 @@ empty =
     , size = { height = 46, width = 64 }
     , trail = []
     }
+
+
+{-| @private
+Find all cells (points) that make up the 2 polygons with a common trail.
+-}
+findOutlineCells : Grid -> Set ( Int, Int )
+findOutlineCells grid =
+    let
+        sidePoints ( x, y ) =
+            [ ( x + 1, y )
+            , ( x - 1, y )
+            , ( x, y - 1 )
+            , ( x, y + 1 )
+            , ( x + 1, y - 1 )
+            , ( x + 1, y + 1 )
+            , ( x - 1, y + 1 )
+            , ( x - 1, y - 1 )
+            ]
+
+        freeSides ( x, y ) =
+            sidePoints ( x, y )
+                |> List.foldl
+                    (\pnt accum ->
+                        case Dict.get pnt grid.cells of
+                            Just mc ->
+                                if Cell.isSpace mc then
+                                    pnt :: accum
+                                else
+                                    accum
+
+                            Nothing ->
+                                accum
+                    )
+                    []
+
+        isOutlineCell sides =
+            List.length sides >= 1
+    in
+    grid.cells
+        |> Dict.filter (\_ mc -> Cell.isBorder mc || Cell.isConquest mc)
+        |> Dict.foldl
+            (\key _ accum ->
+                if freeSides key |> isOutlineCell then
+                    Set.insert key accum
+                else
+                    accum
+            )
+            Set.empty
 
 
 inAnimation : Time -> Grid -> Bool
