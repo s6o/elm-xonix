@@ -97,6 +97,9 @@ conquerSpace grid =
         outline =
             Debug.log "outline cells" (findOutlineCells grid)
 
+        vertexes =
+            Debug.log "vertex cells" (findVertexes outline)
+
         debugOutline =
             Set.foldl
                 (\key accum ->
@@ -109,8 +112,21 @@ conquerSpace grid =
                 )
                 grid.cells
                 outline
+
+        debugVertexes vgrid =
+            List.foldl
+                (\key accum ->
+                    case Dict.get key vgrid |> EMaybe.join of
+                        Just c ->
+                            Dict.update key (\_ -> Just <| Just { c | color = Color.blue }) accum
+
+                        Nothing ->
+                            accum
+                )
+                vgrid
+                vertexes
     in
-    { grid | cells = debugOutline }
+    { grid | cells = debugOutline |> debugVertexes }
 
 
 conquerTrail : Grid -> Grid
@@ -217,6 +233,40 @@ findOutlineCells grid =
                     accum
             )
             Set.empty
+
+
+{-| @private
+-}
+findVertexes : Set ( Int, Int ) -> List ( Int, Int )
+findVertexes outlineCells =
+    let
+        vertexPairs ( x, y ) =
+            [ ( ( x, y - 1 ), ( x + 1, y ) )
+            , ( ( x + 1, y ), ( x, y + 1 ) )
+            , ( ( x, y + 1 ), ( x - 1, y ) )
+            , ( ( x - 1, y ), ( x, y - 1 ) )
+            ]
+
+        cornerPair ( xy1, xy2 ) =
+            ( Set.member xy1 outlineCells
+            , Set.member xy2 outlineCells
+            )
+
+        isVertex ( x, y ) =
+            vertexPairs ( x, y )
+                |> List.map cornerPair
+                |> List.filter (\( t1, t2 ) -> t1 == True && t2 == True)
+                |> (\corners -> List.length corners >= 1)
+    in
+    outlineCells
+        |> Set.foldl
+            (\xy accum ->
+                if isVertex xy then
+                    xy :: accum
+                else
+                    accum
+            )
+            []
 
 
 inAnimation : Time -> Grid -> Bool
