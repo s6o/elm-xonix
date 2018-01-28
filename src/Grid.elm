@@ -15,6 +15,7 @@ module Grid
         )
 
 import Animation exposing (Animation)
+import Array
 import Cell exposing (Cell, Direction(..), Shape(..))
 import Color exposing (Color)
 import Dict exposing (Dict)
@@ -69,6 +70,20 @@ type alias Size =
     }
 
 
+type alias Vertex =
+    { x : Int
+    , y : Int
+    , lines : List VertexLine
+    }
+
+
+type VertexLine
+    = North
+    | South
+    | East
+    | West
+
+
 animate : Time -> Grid -> Grid
 animate systemTick grid =
     { grid
@@ -100,6 +115,12 @@ conquerSpace grid =
         vertexes =
             Debug.log "vertex cells" (findVertexes outline)
 
+        lines =
+            Debug.log "lines" (findLines vertexes)
+
+        lineCount =
+            Debug.log "line count" (List.length lines)
+
         debugOutline =
             Set.foldl
                 (\key accum ->
@@ -115,10 +136,10 @@ conquerSpace grid =
 
         debugVertexes vgrid =
             List.foldl
-                (\key accum ->
-                    case Dict.get key vgrid |> EMaybe.join of
+                (\{ x, y } accum ->
+                    case Dict.get ( x, y ) vgrid |> EMaybe.join of
                         Just c ->
-                            Dict.update key (\_ -> Just <| Just { c | color = Color.blue }) accum
+                            Dict.update ( x, y ) (\_ -> Just <| Just { c | color = Color.blue }) accum
 
                         Nothing ->
                             accum
@@ -224,7 +245,7 @@ findOutlineCells grid =
             List.length sides >= 1
     in
     grid.cells
-        |> Dict.filter (\_ mc -> Cell.isBorder mc || Cell.isConquest mc)
+        |> Dict.filter (\_ mc -> Cell.isPlayer mc || Cell.isBorder mc || Cell.isConquest mc)
         |> Dict.foldl
             (\key _ accum ->
                 if freeSides key |> isOutlineCell then
@@ -236,37 +257,170 @@ findOutlineCells grid =
 
 
 {-| @private
+
+Base vertex combinations to be searched for every given point: (x, y).
+
+        S,E           S,W
+         _ _         _ _
+        |_|_|-------|_|_|
+        |_|           |_|
+        .             .
+        .             .
+         _             _
+        |_|_         _|_|
+        |_|_|-------|_|_|
+        N,E           N,W
+
 -}
-findVertexes : Set ( Int, Int ) -> List ( Int, Int )
+findVertexes : Set ( Int, Int ) -> List Vertex
 findVertexes outlineCells =
     let
+        lineMap idx =
+            case idx of
+                1 ->
+                    North
+
+                2 ->
+                    South
+
+                3 ->
+                    East
+
+                4 ->
+                    West
+
+                _ ->
+                    Debug.crash "Invalid vertex line index."
+
         vertexPairs ( x, y ) =
-            [ ( ( x, y - 1 ), ( x + 1, y ) )
-            , ( ( x + 1, y ), ( x, y + 1 ) )
-            , ( ( x, y + 1 ), ( x - 1, y ) )
-            , ( ( x - 1, y ), ( x, y - 1 ) )
+            [ ( ( x, y - 1 ), ( x + 1, y ), [ 1, 3 ] )
+            , ( ( x + 1, y ), ( x, y + 1 ), [ 2, 3 ] )
+            , ( ( x, y + 1 ), ( x - 1, y ), [ 2, 4 ] )
+            , ( ( x - 1, y ), ( x, y - 1 ), [ 1, 4 ] )
             ]
 
-        cornerPair ( xy1, xy2 ) =
+        isCornerPair ( xy1, xy2, lines ) =
             ( Set.member xy1 outlineCells
             , Set.member xy2 outlineCells
+            , lines
             )
 
-        isVertex ( x, y ) =
+        pointCorners ( x, y ) =
             vertexPairs ( x, y )
-                |> List.map cornerPair
-                |> List.filter (\( t1, t2 ) -> t1 == True && t2 == True)
-                |> (\corners -> List.length corners >= 1)
+                |> List.map isCornerPair
+                |> List.filter (\( t1, t2, _ ) -> t1 == True && t2 == True)
+                |> List.map (\( _, _, d ) -> Set.fromList d)
+                |> List.foldl (\s accum -> Set.union accum s) Set.empty
+                |> (\s -> Set.toList s |> List.map lineMap)
+
+        isVertex corners =
+            List.length corners >= 2
     in
     outlineCells
         |> Set.foldl
             (\xy accum ->
-                if isVertex xy then
-                    xy :: accum
+                let
+                    pc =
+                        pointCorners xy
+
+                    ( x, y ) =
+                        xy
+                in
+                if isVertex pc then
+                    Vertex x y pc :: accum
                 else
                     accum
             )
             []
+
+
+{-| @private
+Construct lines from vertexes, horizontal an vertical.
+-}
+findLines : List Vertex -> List (List Vertex)
+findLines vertexes =
+    let
+        vertexSort primaryFn secondaryFn v1 v2 =
+            let
+                p1 =
+                    primaryFn v1
+
+                s1 =
+                    secondaryFn v1
+
+                p2 =
+                    primaryFn v2
+
+                s2 =
+                    secondaryFn v2
+            in
+            if p1 < p2 then
+                LT
+            else if p1 == p2 && s1 < s2 then
+                LT
+            else if p1 > p2 then
+                GT
+            else if p1 == p2 && s1 > s2 then
+                GT
+            else
+                EQ
+
+        groupPrimaries primaryFn vlist =
+            List.foldl
+                (\v accum ->
+                    case accum of
+                        [] ->
+                            [ v ] :: accum
+
+                        sublist :: rest ->
+                            List.head sublist
+                                |> Maybe.map
+                                    (\p ->
+                                        if primaryFn v == primaryFn p then
+                                            (v :: sublist) :: rest
+                                        else
+                                            [ v ] :: accum
+                                    )
+                                |> Maybe.withDefault accum
+                )
+                []
+                vlist
+
+        groupLines primaries =
+            List.foldl
+                (\pgroup accum ->
+                    if List.length pgroup > 1 then
+                        accum
+                            ++ List.foldl
+                                (\v a ->
+                                    case a of
+                                        [] ->
+                                            [ v ] :: a
+
+                                        lgrp :: rest ->
+                                            if List.length lgrp == 2 then
+                                                List.head lgrp
+                                                    |> Maybe.map (\p -> [ v, p ] :: a)
+                                                    |> Maybe.withDefault a
+                                            else
+                                                (v :: lgrp) :: rest
+                                )
+                                []
+                                pgroup
+                    else
+                        accum
+                )
+                []
+                primaries
+    in
+    (List.sortWith (vertexSort .y .x) vertexes
+        |> groupPrimaries .y
+        |> groupLines
+    )
+        ++ (List.sortWith (vertexSort .x .y) vertexes
+                |> groupPrimaries .x
+                |> groupLines
+           )
 
 
 inAnimation : Time -> Grid -> Bool
