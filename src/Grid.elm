@@ -3,6 +3,8 @@ module Grid
         ( Colors
         , Grid
         , Size
+        , Vertex
+        , VertexLine
         , animate
         , clearTrail
         , conquer
@@ -15,7 +17,6 @@ module Grid
         )
 
 import Animation exposing (Animation)
-import Array
 import Cell exposing (Cell, Direction(..), Shape(..))
 import Color exposing (Color)
 import Dict exposing (Dict)
@@ -115,12 +116,12 @@ conquerSpace grid =
         vertexes =
             Debug.log "vertex cells" (findVertexes outline)
 
-        lines =
-            Debug.log "lines" (findLines vertexes)
-
-        lineCount =
-            Debug.log "line count" (List.length lines)
-
+        --        polygons =
+        --            findPolygons vertexes
+        --        lines =
+        --            Debug.log "lines" (findLines vertexes)
+        --        lineCount =
+        --            Debug.log "line count" (List.length lines)
         debugOutline =
             Set.foldl
                 (\key accum ->
@@ -147,7 +148,9 @@ conquerSpace grid =
                 vgrid
                 vertexes
     in
-    { grid | cells = debugOutline |> debugVertexes }
+    { grid
+        | cells = debugOutline |> debugVertexes
+    }
 
 
 conquerTrail : Grid -> Grid
@@ -254,6 +257,239 @@ findOutlineCells grid =
                     accum
             )
             Set.empty
+
+
+{-| @private
+
+A trail left by the player, dividing the empty area will always create 2 polygons.
+There are 2 vertexes, at each end of the trail, that have 3 line connections,
+while the rest have two connections (`VertexLine`).
+
+        1) find trail vertexes
+        2) for each trail vertex
+            2.1) trace next vertex in clockwise direction not on the trail
+            2.2) is (the new) vertex equal to the other trail vertex (crossing) ?
+                2.2.1) no -> goto 2.1
+                2.2.2) yes, continue
+            2.3) trace the next vertex on the trail
+            2.4) is (the new) vertex equal to the other (starting) trail vertex ?
+                2.4.1) no -> goto 2.3
+                2.2.2) yes -> polygon complete
+
+-}
+findPolygons : List Vertex -> ( List Vertex, List Vertex )
+findPolygons vertexes =
+    let
+        ( trailv1, trailv2 ) =
+            Debug.log "Trail vertexes"
+                (vertexes
+                    |> List.filter (\r -> List.length r.lines == 3)
+                    |> (\tvl ->
+                            case tvl of
+                                t1 :: t2 :: [] ->
+                                    ( t1, t2 )
+
+                                _ ->
+                                    Debug.crash "Something is wrong in vertex logic, expecting 2 trail vertexes"
+                       )
+                )
+
+        poly1 =
+            Debug.log "poly1"
+                (directionClockwise trailv1
+                    |> nextVertex vertexes trailv1
+                    |> tracePath vertexes [] trailv2
+                    |> (\accum ->
+                            directionTrail trailv2
+                                |> nextVertex vertexes trailv2
+                                |> tracePath vertexes accum trailv1
+                       )
+                )
+
+        poly2 =
+            Debug.log "poly2"
+                (directionClockwise trailv2
+                    |> nextVertex vertexes trailv2
+                    |> tracePath vertexes [] trailv1
+                    |> (\accum ->
+                            directionTrail trailv1
+                                |> nextVertex vertexes trailv1
+                                |> tracePath vertexes accum trailv2
+                       )
+                )
+    in
+    ( [], [] )
+
+
+{-| @private
+Go from a `List VertexLine` e.g. [North-South-East] to sorted "-East-North-South"
+-}
+directionString : List VertexLine -> String
+directionString directions =
+    directions
+        |> List.map Basics.toString
+        |> List.sort
+        |> List.foldl (\ds a -> String.append a ("-" ++ ds)) ""
+
+
+{-| @private
+-}
+directionPredicate : VertexLine -> Vertex -> Vertex -> Bool
+directionPredicate direction start current =
+    case direction of
+        East ->
+            current.x > start.x && current.y == start.y
+
+        North ->
+            current.x == start.x && current.y < start.y
+
+        South ->
+            current.x == start.x && current.y > start.y
+
+        West ->
+            current.x < start.x && current.y == start.y
+
+
+{-| @private
+-}
+directionSorter : VertexLine -> Vertex -> Vertex -> Order
+directionSorter direction va vb =
+    case direction of
+        East ->
+            Basics.compare va.x vb.x
+
+        North ->
+            case Basics.compare va.y vb.y of
+                EQ ->
+                    EQ
+
+                GT ->
+                    LT
+
+                LT ->
+                    GT
+
+        South ->
+            Basics.compare va.y vb.y
+
+        West ->
+            case Basics.compare va.x vb.x of
+                EQ ->
+                    EQ
+
+                GT ->
+                    LT
+
+                LT ->
+                    GT
+
+
+{-| @private
+-}
+directionClockwise : Vertex -> VertexLine
+directionClockwise v =
+    case directionString v.lines of
+        "-East-North-South" ->
+            North
+
+        "-East-North-West" ->
+            West
+
+        "-East-South-West" ->
+            East
+
+        "-North-South-West" ->
+            South
+
+        _ ->
+            Debug.crash "Could not find clockwise trace direction from trail's vertex"
+
+
+{-| @private
+-}
+directionTrail : Vertex -> VertexLine
+directionTrail v =
+    case directionString v.lines of
+        "-East-North-South" ->
+            East
+
+        "-East-North-West" ->
+            North
+
+        "-East-South-West" ->
+            South
+
+        "-North-South-West" ->
+            West
+
+        _ ->
+            Debug.crash "Could not find clockwise trace direction from trail's vertex"
+
+
+{-| @private
+Except for 2 trail vertexes, all other vertexes have 2 line connections.
+Eliminate the (line) direction from which "a tracer" arrived and returned the
+next (remaining) direction.
+-}
+nextDirection : ( Vertex, VertexLine ) -> Maybe VertexLine
+nextDirection ( vertex, prevdir ) =
+    let
+        arraival =
+            case prevdir of
+                East ->
+                    West
+
+                North ->
+                    South
+
+                South ->
+                    North
+
+                West ->
+                    East
+    in
+    vertex.lines
+        |> List.filter (\d -> d /= arraival)
+        |> List.head
+
+
+{-| @private
+Given a vertex point and direction, trace to the next vertex point and arraival direction.
+-}
+nextVertex : List Vertex -> Vertex -> VertexLine -> Maybe ( Vertex, VertexLine )
+nextVertex vertexes start direction =
+    vertexes
+        |> List.filter (directionPredicate direction start)
+        |> List.sortWith (directionSorter direction)
+        |> List.head
+        |> Maybe.map (\v -> ( v, direction ))
+
+
+{-| @private
+-}
+tracePath : List Vertex -> List Vertex -> Vertex -> Maybe ( Vertex, VertexLine ) -> List Vertex
+tracePath vertexes accum crossing mvd =
+    case mvd of
+        Nothing ->
+            let
+                _ =
+                    Debug.log "Missing next vertex and previous direction."
+            in
+            []
+
+        Just ( current, previousDirection ) ->
+            case current == crossing of
+                True ->
+                    current :: accum
+
+                False ->
+                    let
+                        next =
+                            nextDirection ( current, previousDirection )
+                                |> Maybe.map (nextVertex vertexes current)
+                                |> EMaybe.join
+                    in
+                    tracePath vertexes (current :: accum) crossing next
 
 
 {-| @private
