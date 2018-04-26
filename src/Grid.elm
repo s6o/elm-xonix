@@ -114,10 +114,11 @@ conquerSpace grid =
             Debug.log "outline cells" (findOutlineCells grid)
 
         vertexes =
-            Debug.log "vertex cells" (findVertexes outline)
+            Debug.log "vertex cells" (findVertexes grid outline)
 
-        --        polygons =
-        --            findPolygons vertexes
+        polygons =
+            findPolygons vertexes
+
         --        lines =
         --            Debug.log "lines" (findLines vertexes)
         --        lineCount =
@@ -318,7 +319,7 @@ findPolygons vertexes =
                        )
                 )
     in
-    ( [], [] )
+    ( poly1, poly2 )
 
 
 {-| @private
@@ -508,8 +509,8 @@ Base vertex combinations to be searched for every given point: (x, y).
         N,E           N,W
 
 -}
-findVertexes : Set ( Int, Int ) -> List Vertex
-findVertexes outlineCells =
+findVertexes : Grid -> Set ( Int, Int ) -> List Vertex
+findVertexes grid outlineCells =
     let
         lineMap idx =
             case idx of
@@ -528,36 +529,67 @@ findVertexes outlineCells =
                 _ ->
                     Debug.crash "Invalid vertex line index."
 
-        vertexPairs ( x, y ) =
-            [ ( ( x, y - 1 ), ( x + 1, y ), [ 1, 3 ] )
-            , ( ( x + 1, y ), ( x, y + 1 ), [ 2, 3 ] )
-            , ( ( x, y + 1 ), ( x - 1, y ), [ 2, 4 ] )
-            , ( ( x - 1, y ), ( x, y - 1 ), [ 1, 4 ] )
+        vertexChecks ( x, y ) =
+            [ { outline = ( ( x, y - 1 ), ( x + 1, y ) )
+              , space = [ ( x + 1, y - 1 ) ]
+              , lines = [ 1, 3 ]
+              }
+            , { outline = ( ( x, y - 1 ), ( x + 1, y ) )
+              , space = [ ( x - 1, y ), ( x - 1, y + 1 ), ( x, y + 1 ) ]
+              , lines = [ 1, 3 ]
+              }
+            , { outline = ( ( x + 1, y ), ( x, y + 1 ) )
+              , space = [ ( x + 1, y + 1 ) ]
+              , lines = [ 2, 3 ]
+              }
+            , { outline = ( ( x + 1, y ), ( x, y + 1 ) )
+              , space = [ ( x - 1, y ), ( x - 1, y - 1 ), ( x, y - 1 ) ]
+              , lines = [ 2, 3 ]
+              }
+            , { outline = ( ( x, y + 1 ), ( x - 1, y ) )
+              , space = [ ( x - 1, y + 1 ) ]
+              , lines = [ 2, 4 ]
+              }
+            , { outline = ( ( x, y + 1 ), ( x - 1, y ) )
+              , space = [ ( x, y - 1 ), ( x + 1, y - 1 ), ( x + 1, y ) ]
+              , lines = [ 2, 4 ]
+              }
+            , { outline = ( ( x - 1, y ), ( x, y - 1 ) )
+              , space = [ ( x - 1, y - 1 ) ]
+              , lines = [ 1, 4 ]
+              }
+            , { outline = ( ( x - 1, y ), ( x, y - 1 ) )
+              , space = [ ( x + 1, y ), ( x + 1, y + 1 ), ( x, y + 1 ) ]
+              , lines = [ 1, 4 ]
+              }
             ]
 
-        isCornerPair ( xy1, xy2, lines ) =
-            ( Set.member xy1 outlineCells
-            , Set.member xy2 outlineCells
-            , lines
-            )
+        checkOutline ( xy1, xy2 ) =
+            Set.member xy1 outlineCells && Set.member xy2 outlineCells
 
-        pointCorners ( x, y ) =
-            vertexPairs ( x, y )
-                |> List.map isCornerPair
-                |> List.filter (\( t1, t2, _ ) -> t1 == True && t2 == True)
-                |> List.map (\( _, _, d ) -> Set.fromList d)
+        checkSpace coordPairs =
+            List.length coordPairs
+                == (coordPairs
+                        |> List.filter (\xy -> Dict.get xy grid.cells |> EMaybe.join |> Cell.isSpace)
+                        |> List.length
+                   )
+
+        pointChecks ( x, y ) =
+            vertexChecks ( x, y )
+                |> List.filter (\vrec -> checkOutline vrec.outline && checkSpace vrec.space)
+                |> List.map (\vrec -> Set.fromList vrec.lines)
                 |> List.foldl (\s accum -> Set.union accum s) Set.empty
                 |> (\s -> Set.toList s |> List.map lineMap)
 
-        isVertex corners =
-            List.length corners >= 2
+        isVertex checks =
+            List.length checks >= 1
     in
     outlineCells
         |> Set.foldl
             (\xy accum ->
                 let
                     pc =
-                        pointCorners xy
+                        pointChecks xy
 
                     ( x, y ) =
                         xy
