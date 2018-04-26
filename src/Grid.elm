@@ -530,42 +530,62 @@ findVertexes grid outlineCells =
                     Debug.crash "Invalid vertex line index."
 
         vertexChecks ( x, y ) =
-            [ { outline = ( ( x, y - 1 ), ( x + 1, y ) )
+            [ { outline = [ ( x, y - 1 ), ( x + 1, y ) ]
               , space = [ ( x + 1, y - 1 ) ]
               , lines = [ 1, 3 ]
               }
-            , { outline = ( ( x, y - 1 ), ( x + 1, y ) )
+            , { outline = [ ( x, y - 1 ), ( x + 1, y ), ( x - 1, y ) ]
+              , space = [ ( x + 1, y - 1 ) ]
+              , lines = [ 1, 3, 4 ]
+              }
+            , { outline = [ ( x, y - 1 ), ( x + 1, y ) ]
               , space = [ ( x - 1, y ), ( x - 1, y + 1 ), ( x, y + 1 ) ]
               , lines = [ 1, 3 ]
               }
-            , { outline = ( ( x + 1, y ), ( x, y + 1 ) )
+            , { outline = [ ( x + 1, y ), ( x, y + 1 ) ]
               , space = [ ( x + 1, y + 1 ) ]
               , lines = [ 2, 3 ]
               }
-            , { outline = ( ( x + 1, y ), ( x, y + 1 ) )
+            , { outline = [ ( x + 1, y ), ( x, y + 1 ), ( x - 1, y ) ]
+              , space = [ ( x + 1, y + 1 ) ]
+              , lines = [ 2, 3, 4 ]
+              }
+            , { outline = [ ( x + 1, y ), ( x, y + 1 ) ]
               , space = [ ( x - 1, y ), ( x - 1, y - 1 ), ( x, y - 1 ) ]
               , lines = [ 2, 3 ]
               }
-            , { outline = ( ( x, y + 1 ), ( x - 1, y ) )
+            , { outline = [ ( x, y + 1 ), ( x - 1, y ) ]
               , space = [ ( x - 1, y + 1 ) ]
               , lines = [ 2, 4 ]
               }
-            , { outline = ( ( x, y + 1 ), ( x - 1, y ) )
+            , { outline = [ ( x, y + 1 ), ( x - 1, y ), ( x + 1, y ) ]
+              , space = [ ( x - 1, y + 1 ) ]
+              , lines = [ 2, 4, 3 ]
+              }
+            , { outline = [ ( x, y + 1 ), ( x - 1, y ) ]
               , space = [ ( x, y - 1 ), ( x + 1, y - 1 ), ( x + 1, y ) ]
               , lines = [ 2, 4 ]
               }
-            , { outline = ( ( x - 1, y ), ( x, y - 1 ) )
+            , { outline = [ ( x - 1, y ), ( x, y - 1 ) ]
               , space = [ ( x - 1, y - 1 ) ]
               , lines = [ 1, 4 ]
               }
-            , { outline = ( ( x - 1, y ), ( x, y - 1 ) )
+            , { outline = [ ( x - 1, y ), ( x, y - 1 ), ( x + 1, y ) ]
+              , space = [ ( x - 1, y - 1 ) ]
+              , lines = [ 1, 4, 3 ]
+              }
+            , { outline = [ ( x - 1, y ), ( x, y - 1 ) ]
               , space = [ ( x + 1, y ), ( x + 1, y + 1 ), ( x, y + 1 ) ]
               , lines = [ 1, 4 ]
               }
             ]
 
-        checkOutline ( xy1, xy2 ) =
-            Set.member xy1 outlineCells && Set.member xy2 outlineCells
+        checkOutline coordPairs =
+            List.length coordPairs
+                == (coordPairs
+                        |> List.filter (\xy -> Set.member xy outlineCells)
+                        |> List.length
+                   )
 
         checkSpace coordPairs =
             List.length coordPairs
