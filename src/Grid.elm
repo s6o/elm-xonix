@@ -17,6 +17,7 @@ module Grid
         )
 
 import Animation exposing (Animation)
+import Bitwise
 import Cell exposing (Cell, Direction(..), Shape(..))
 import Color exposing (Color)
 import Dict exposing (Dict)
@@ -118,6 +119,9 @@ conquerSpace grid =
 
         polygons =
             findPolygons vertexes
+
+        polysToFill =
+            Debug.log "Polys to fill" (findPolygonsToFill polygons grid.balls)
 
         --        lines =
         --            Debug.log "lines" (findLines vertexes)
@@ -266,7 +270,7 @@ A trail left by the player, dividing the empty area will always create 2 polygon
 There are 2 vertexes, at each end of the trail, that have 3 line connections,
 while the rest have two connections (`VertexLine`).
 
-        1) find trail vertexes
+      * 1) find trail vertexes
         2) for each trail vertex
             2.1) trace next vertex in clockwise direction not on the trail
             2.2) is (the new) vertex equal to the other trail vertex (crossing) ?
@@ -320,6 +324,143 @@ findPolygons vertexes =
                 )
     in
     ( poly1, poly2 )
+
+
+{-| @private
+Given 2 polygons check if they contain balls or not. Polygons without balls are
+returned as is, otherwise an empty list is returned.
+-}
+findPolygonsToFill : ( List Vertex, List Vertex ) -> List (Maybe Cell) -> ( List Vertex, List Vertex )
+findPolygonsToFill ( poly1, poly2 ) balls =
+    let
+        rec : List Vertex -> { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
+        rec poly =
+            { points =
+                poly
+                    |> List.indexedMap (,)
+                    |> Dict.fromList
+            , constants = Dict.empty
+            , multiples = Dict.empty
+            }
+
+        cms :
+            { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
+            -> { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
+        cms r =
+            Dict.foldl
+                (\_ vrtxRgt ( idxLeft, idxRight, dc, dm ) ->
+                    case Dict.get idxLeft r.points of
+                        Nothing ->
+                            ( idxLeft, idxRight, dc, dm )
+
+                        Just vrtxLft ->
+                            if vrtxRgt.y == vrtxLft.y then
+                                ( idxRight
+                                , idxRight + 1
+                                , Dict.insert idxRight vrtxRgt.x dc
+                                , Dict.insert idxRight 0 dm
+                                )
+                            else
+                                let
+                                    c : Int
+                                    c =
+                                        vrtxRgt.x
+                                            - (vrtxRgt.y * vrtxLft.x)
+                                            // (vrtxLft.y - vrtxRgt.y)
+                                            + (vrtxRgt.y * vrtxRgt.x)
+                                            // (vrtxLft.y - vrtxRgt.y)
+
+                                    m : Int
+                                    m =
+                                        (vrtxLft.x - vrtxRgt.x)
+                                            // (vrtxLft.y - vrtxRgt.y)
+                                in
+                                ( idxRight
+                                , idxRight + 1
+                                , Dict.insert idxRight c dc
+                                , Dict.insert idxRight m dm
+                                )
+                )
+                ( Dict.size r.points - 1, 0, Dict.empty, Dict.empty )
+                r.points
+                |> (\( _, _, dc, dm ) -> { r | constants = dc, multiples = dm })
+
+        poly1Rec =
+            rec poly1 |> cms
+
+        poly2Rec =
+            rec poly2 |> cms
+
+        checkPoly :
+            List (Maybe Cell)
+            -> { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
+            -> Int
+        checkPoly targets r =
+            targets
+                |> List.foldl (\t inside -> Bitwise.xor inside (checkPolyPoint t r)) 0
+
+        checkPolyPoint :
+            Maybe Cell
+            -> { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
+            -> Int
+        checkPolyPoint target r =
+            target
+                |> Maybe.map
+                    (\t ->
+                        Dict.foldl
+                            (\_ vrtxRgt ( idxLeft, idxRight, inside ) ->
+                                case Dict.get idxLeft r.points of
+                                    Nothing ->
+                                        ( idxLeft, idxRight, inside )
+
+                                    Just vrtxLft ->
+                                        if
+                                            (vrtxRgt.y < t.cellY && vrtxLft.y >= t.cellY)
+                                                || (vrtxLft.y < t.cellY && vrtxRgt.y >= t.cellY)
+                                        then
+                                            let
+                                                c =
+                                                    Dict.get idxRight r.constants
+                                                        |> Maybe.withDefault 0
+
+                                                m =
+                                                    Dict.get idxRight r.multiples
+                                                        |> Maybe.withDefault 0
+                                            in
+                                            ( idxRight
+                                            , idxRight + 1
+                                            , Bitwise.xor
+                                                inside
+                                                ((t.cellY * m + c < t.cellX)
+                                                    |> (\r ->
+                                                            if r == True then
+                                                                1
+                                                            else
+                                                                0
+                                                       )
+                                                )
+                                            )
+                                        else
+                                            ( idxRight
+                                            , idxRight + 1
+                                            , inside
+                                            )
+                            )
+                            ( Dict.size r.points - 1, 0, 0 )
+                            r.points
+                    )
+                |> Maybe.withDefault ( 0, 0, 0 )
+                |> (\( _, _, inside ) -> inside)
+    in
+    ( if checkPoly balls poly1Rec == 0 then
+        []
+      else
+        poly1
+    , if checkPoly balls poly2Rec == 0 then
+        []
+      else
+        poly2
+    )
 
 
 {-| @private
@@ -497,7 +638,7 @@ tracePath vertexes accum crossing mvd =
 
 Base vertex combinations to be searched for every given point: (x, y).
 
-        S,E           S,W
+    *   S,E           S,W
          _ _         _ _
         |_|_|-------|_|_|
         |_|           |_|
