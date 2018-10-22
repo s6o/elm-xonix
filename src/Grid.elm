@@ -1,23 +1,22 @@
-module Grid
-    exposing
-        ( Colors
-        , Grid
-        , Size
-        , Vertex
-        , VertexLine
-        , animate
-        , clearTrail
-        , conquer
-        , inAnimation
-        , init
-        , initAnimation
-        , movePlayer
-        , nextBallPositions
-        , update
-        )
+module Grid exposing
+    ( Colors
+    , Grid
+    , Size
+    , Vertex
+    , VertexLine
+    , animate
+    , clearTrail
+    , conquer
+    , inAnimation
+    , init
+    , initAnimation
+    , movePlayer
+    , nextBallPositions
+    , update
+    )
 
 import Animation exposing (Animation)
-import Bitwise
+import Array
 import Cell exposing (Cell, Direction(..), Shape(..))
 import Color exposing (Color)
 import Dict exposing (Dict)
@@ -120,14 +119,19 @@ conquerSpace grid =
         polygons =
             findPolygons vertexes
 
-        polysToFill =
-            Debug.log "Polys to fill" (findPolygonsToFill polygons grid.balls)
+        polyLines =
+            let
+                ( poly1, poly2 ) =
+                    polygons
+            in
+            ( Debug.log "poly 1 lines" (findLines poly1)
+            , Debug.log "poly 2 lines" (findLines poly2)
+            )
 
-        --        lines =
-        --            Debug.log "lines" (findLines vertexes)
-        --        lineCount =
-        --            Debug.log "line count" (List.length lines)
-        debugOutline =
+        polysToFill =
+            findPolygonsToFill polyLines grid.balls
+
+        debugOutline ogrid =
             Set.foldl
                 (\key accum ->
                     case Dict.get key grid.cells |> EMaybe.join of
@@ -137,7 +141,7 @@ conquerSpace grid =
                         Nothing ->
                             accum
                 )
-                grid.cells
+                ogrid.cells
                 outline
 
         debugVertexes vgrid =
@@ -153,9 +157,10 @@ conquerSpace grid =
                 vgrid
                 vertexes
     in
-    { grid
-        | cells = debugOutline |> debugVertexes
-    }
+    { grid | cells = fillPolygons polysToFill grid }
+        |> (\g ->
+                { g | cells = debugOutline g |> debugVertexes }
+           )
 
 
 conquerTrail : Grid -> Grid
@@ -191,6 +196,10 @@ clearTrail grid =
         , trail = []
     }
         |> initPlayer
+
+
+
+--- IMPL. Details
 
 
 {-| @private
@@ -241,6 +250,7 @@ findOutlineCells grid =
                             Just mc ->
                                 if Cell.isSpace mc then
                                     pnt :: accum
+
                                 else
                                     accum
 
@@ -258,10 +268,141 @@ findOutlineCells grid =
             (\key _ accum ->
                 if freeSides key |> isOutlineCell then
                     Set.insert key accum
+
                 else
                     accum
             )
             Set.empty
+
+
+{-| @private
+
+Base vertex combinations to be searched for every given point: (x, y).
+
+    *   S,E           S,W
+         _ _         _ _
+        |_|_|-------|_|_|
+        |_|           |_|
+        .             .
+        .             .
+         _             _
+        |_|_         _|_|
+        |_|_|-------|_|_|
+        N,E           N,W
+
+-}
+findVertexes : Grid -> Set ( Int, Int ) -> List Vertex
+findVertexes grid outlineCells =
+    let
+        lineMap idx =
+            case idx of
+                1 ->
+                    North
+
+                2 ->
+                    South
+
+                3 ->
+                    East
+
+                4 ->
+                    West
+
+                _ ->
+                    Debug.crash "Invalid vertex line index."
+
+        vertexChecks ( x, y ) =
+            [ { outline = [ ( x, y - 1 ), ( x + 1, y ) ]
+              , space = [ ( x + 1, y - 1 ) ]
+              , lines = [ 1, 3 ]
+              }
+            , { outline = [ ( x, y - 1 ), ( x + 1, y ), ( x - 1, y ), ( x - 2, y ) ]
+              , space = [ ( x + 1, y - 1 ) ]
+              , lines = [ 1, 3, 4 ]
+              }
+            , { outline = [ ( x, y - 1 ), ( x + 1, y ) ]
+              , space = [ ( x - 1, y ), ( x - 1, y + 1 ), ( x, y + 1 ) ]
+              , lines = [ 1, 3 ]
+              }
+            , { outline = [ ( x + 1, y ), ( x, y + 1 ) ]
+              , space = [ ( x + 1, y + 1 ) ]
+              , lines = [ 2, 3 ]
+              }
+            , { outline = [ ( x + 1, y ), ( x, y + 1 ), ( x - 1, y ), ( x - 2, y ) ]
+              , space = [ ( x + 1, y + 1 ) ]
+              , lines = [ 2, 3, 4 ]
+              }
+            , { outline = [ ( x + 1, y ), ( x, y + 1 ) ]
+              , space = [ ( x - 1, y ), ( x - 1, y - 1 ), ( x, y - 1 ) ]
+              , lines = [ 2, 3 ]
+              }
+            , { outline = [ ( x, y + 1 ), ( x - 1, y ) ]
+              , space = [ ( x - 1, y + 1 ) ]
+              , lines = [ 2, 4 ]
+              }
+            , { outline = [ ( x, y + 1 ), ( x - 1, y ), ( x + 1, y ), ( x + 2, y ) ]
+              , space = [ ( x - 1, y + 1 ) ]
+              , lines = [ 2, 4, 3 ]
+              }
+            , { outline = [ ( x, y + 1 ), ( x - 1, y ) ]
+              , space = [ ( x, y - 1 ), ( x + 1, y - 1 ), ( x + 1, y ) ]
+              , lines = [ 2, 4 ]
+              }
+            , { outline = [ ( x - 1, y ), ( x, y - 1 ) ]
+              , space = [ ( x - 1, y - 1 ) ]
+              , lines = [ 1, 4 ]
+              }
+            , { outline = [ ( x - 1, y ), ( x, y - 1 ), ( x + 1, y ), ( x + 2, y ) ]
+              , space = [ ( x - 1, y - 1 ) ]
+              , lines = [ 1, 4, 3 ]
+              }
+            , { outline = [ ( x - 1, y ), ( x, y - 1 ) ]
+              , space = [ ( x + 1, y ), ( x + 1, y + 1 ), ( x, y + 1 ) ]
+              , lines = [ 1, 4 ]
+              }
+            ]
+
+        checkOutline coordPairs =
+            List.length coordPairs
+                == (coordPairs
+                        |> List.filter (\xy -> Set.member xy outlineCells)
+                        |> List.length
+                   )
+
+        checkSpace coordPairs =
+            List.length coordPairs
+                == (coordPairs
+                        |> List.filter (\xy -> Dict.get xy grid.cells |> EMaybe.join |> Cell.isSpace)
+                        |> List.length
+                   )
+
+        pointChecks ( x, y ) =
+            vertexChecks ( x, y )
+                |> List.filter (\vrec -> checkOutline vrec.outline && checkSpace vrec.space)
+                |> List.map (\vrec -> Set.fromList vrec.lines)
+                |> List.foldl (\s accum -> Set.union accum s) Set.empty
+                |> (\s -> Set.toList s |> List.map lineMap)
+
+        isVertex checks =
+            List.length checks >= 1
+    in
+    outlineCells
+        |> Set.foldl
+            (\xy accum ->
+                let
+                    pc =
+                        pointChecks xy
+
+                    ( x, y ) =
+                        xy
+                in
+                if isVertex pc then
+                    Vertex x y pc :: accum
+
+                else
+                    accum
+            )
+            []
 
 
 {-| @private
@@ -327,140 +468,145 @@ findPolygons vertexes =
 
 
 {-| @private
-Given 2 polygons check if they contain balls or not. Polygons without balls are
-returned as is, otherwise an empty list is returned.
+Construct lines, filter out horizontal lines, order line vertexes by y axis.
 -}
-findPolygonsToFill : ( List Vertex, List Vertex ) -> List (Maybe Cell) -> ( List Vertex, List Vertex )
-findPolygonsToFill ( poly1, poly2 ) balls =
+findLines : List Vertex -> List ( Vertex, Vertex )
+findLines vertexes =
     let
-        rec : List Vertex -> { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
-        rec poly =
-            { points =
-                poly
-                    |> List.indexedMap (,)
-                    |> Dict.fromList
-            , constants = Dict.empty
-            , multiples = Dict.empty
-            }
+        connector vs lines =
+            case vs of
+                [] ->
+                    lines
 
-        cms :
-            { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
-            -> { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
-        cms r =
-            Dict.foldl
-                (\_ vrtxRgt ( idxLeft, idxRight, dc, dm ) ->
-                    case Dict.get idxLeft r.points of
-                        Nothing ->
-                            ( idxLeft, idxRight, dc, dm )
+                v1 :: next ->
+                    case next of
+                        [] ->
+                            lines
 
-                        Just vrtxLft ->
-                            if vrtxRgt.y == vrtxLft.y then
-                                ( idxRight
-                                , idxRight + 1
-                                , Dict.insert idxRight vrtxRgt.x dc
-                                , Dict.insert idxRight 0 dm
-                                )
-                            else
-                                let
-                                    c : Int
-                                    c =
-                                        vrtxRgt.x
-                                            - (vrtxRgt.y * vrtxLft.x)
-                                            // (vrtxLft.y - vrtxRgt.y)
-                                            + (vrtxRgt.y * vrtxRgt.x)
-                                            // (vrtxLft.y - vrtxRgt.y)
-
-                                    m : Int
-                                    m =
-                                        (vrtxLft.x - vrtxRgt.x)
-                                            // (vrtxLft.y - vrtxRgt.y)
-                                in
-                                ( idxRight
-                                , idxRight + 1
-                                , Dict.insert idxRight c dc
-                                , Dict.insert idxRight m dm
-                                )
-                )
-                ( Dict.size r.points - 1, 0, Dict.empty, Dict.empty )
-                r.points
-                |> (\( _, _, dc, dm ) -> { r | constants = dc, multiples = dm })
-
-        poly1Rec =
-            rec poly1 |> cms
-
-        poly2Rec =
-            rec poly2 |> cms
-
-        checkPoly :
-            List (Maybe Cell)
-            -> { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
-            -> Int
-        checkPoly targets r =
-            targets
-                |> List.foldl (\t inside -> Bitwise.xor inside (checkPolyPoint t r)) 0
-
-        checkPolyPoint :
-            Maybe Cell
-            -> { points : Dict Int Vertex, constants : Dict Int Int, multiples : Dict Int Int }
-            -> Int
-        checkPolyPoint target r =
-            target
-                |> Maybe.map
-                    (\t ->
-                        Dict.foldl
-                            (\_ vrtxRgt ( idxLeft, idxRight, inside ) ->
-                                case Dict.get idxLeft r.points of
-                                    Nothing ->
-                                        ( idxLeft, idxRight, inside )
-
-                                    Just vrtxLft ->
-                                        if
-                                            (vrtxRgt.y < t.cellY && vrtxLft.y >= t.cellY)
-                                                || (vrtxLft.y < t.cellY && vrtxRgt.y >= t.cellY)
-                                        then
-                                            let
-                                                c =
-                                                    Dict.get idxRight r.constants
-                                                        |> Maybe.withDefault 0
-
-                                                m =
-                                                    Dict.get idxRight r.multiples
-                                                        |> Maybe.withDefault 0
-                                            in
-                                            ( idxRight
-                                            , idxRight + 1
-                                            , Bitwise.xor
-                                                inside
-                                                ((t.cellY * m + c < t.cellX)
-                                                    |> (\r ->
-                                                            if r == True then
-                                                                1
-                                                            else
-                                                                0
-                                                       )
-                                                )
-                                            )
-                                        else
-                                            ( idxRight
-                                            , idxRight + 1
-                                            , inside
-                                            )
-                            )
-                            ( Dict.size r.points - 1, 0, 0 )
-                            r.points
-                    )
-                |> Maybe.withDefault ( 0, 0, 0 )
-                |> (\( _, _, inside ) -> inside)
+                        v2 :: rest ->
+                            connector next (( v1, v2 ) :: lines)
     in
-    ( if checkPoly balls poly1Rec == 0 then
-        []
-      else
-        poly1
-    , if checkPoly balls poly2Rec == 0 then
-        []
-      else
-        poly2
+    List.head vertexes
+        |> Maybe.map
+            (\h ->
+                connector (vertexes ++ [ h ]) []
+                    |> List.filter (\( v1, v2 ) -> v1.x == v2.x)
+                    |> List.map
+                        (\( v1, v2 ) ->
+                            case v1.y <= v2.y of
+                                False ->
+                                    ( v2, v1 )
+
+                                True ->
+                                    ( v1, v2 )
+                        )
+            )
+        |> Maybe.withDefault []
+
+
+{-| @private
+Given 2 polygons as its vertical lines, check if scanpoints contain balls.
+If no balls are found in scanpoints return the polygon as scanpoints dictionary,
+otherwise return an empty dictionary.
+-}
+findPolygonsToFill : ( List ( Vertex, Vertex ), List ( Vertex, Vertex ) ) -> List (Maybe Cell) -> ( Dict ( Int, Int ) (Maybe Cell), Dict ( Int, Int ) (Maybe Cell) )
+findPolygonsToFill ( polyLines1, polyLines2 ) balls =
+    let
+        polyArea lines =
+            balls
+                |> List.map
+                    (\mc ->
+                        mc
+                            |> Maybe.map (\c -> ( ( c.cellX, c.cellY ), True ))
+                            |> Maybe.withDefault ( ( 0, 0 ), False )
+                    )
+                |> List.filter (\( _, flag ) -> flag)
+                |> Dict.fromList
+                |> Dict.foldl
+                    (\ball _ points ->
+                        if Dict.isEmpty points then
+                            Dict.empty
+
+                        else
+                            points
+                                |> Dict.get ball
+                                |> Maybe.map (\_ -> Dict.empty)
+                                |> Maybe.withDefault points
+                    )
+                    (polyPoints lines Dict.empty)
+    in
+    ( polyArea polyLines1
+    , polyArea polyLines2
     )
+
+
+{-| @private
+-}
+fillPolygons : ( Dict ( Int, Int ) (Maybe Cell), Dict ( Int, Int ) (Maybe Cell) ) -> Grid -> Dict ( Int, Int ) (Maybe Cell)
+fillPolygons ( polyArea1, polyArea2 ) grid =
+    let
+        fillCells area cells =
+            area
+                |> Dict.foldl
+                    (\( x, y ) _ acc ->
+                        acc
+                            |> Dict.insert ( x, y ) (Cell.conquest grid.colors.conquest x y |> Just)
+                    )
+                    cells
+    in
+    grid.cells
+        |> fillCells polyArea1
+        |> fillCells polyArea2
+
+
+{-| @private
+-}
+orderLinesByX : ( Vertex, Vertex ) -> ( Vertex, Vertex ) -> Basics.Order
+orderLinesByX ( v1, _ ) ( v2, _ ) =
+    if v1.x < v2.x then
+        Basics.LT
+
+    else if v1.x > v2.x then
+        Basics.GT
+
+    else
+        Basics.EQ
+
+
+polyPoints : List ( Vertex, Vertex ) -> Dict ( Int, Int ) (Maybe Cell) -> Dict ( Int, Int ) (Maybe Cell)
+polyPoints lines points =
+    case lines of
+        [] ->
+            points
+
+        leftLine :: restlines ->
+            case restlines of
+                [] ->
+                    points
+
+                rightLine :: rest ->
+                    scanlinePoints leftLine rightLine points
+                        |> polyPoints rest
+
+
+{-| @private
+-}
+scanlinePoints : ( Vertex, Vertex ) -> ( Vertex, Vertex ) -> Dict ( Int, Int ) (Maybe Cell) -> Dict ( Int, Int ) (Maybe Cell)
+scanlinePoints ( vl1, vl2 ) ( vr, _ ) points =
+    Array.initialize (vr.x - vl1.x - 1) (\n -> vl1.x + n + 1)
+        |> Array.toList
+        |> List.foldl
+            (\x acc ->
+                Array.initialize (vl2.y - vl1.y - 1) (\n -> vl1.y + n + 1)
+                    |> Array.toList
+                    |> List.foldl
+                        (\y xy ->
+                            xy
+                                |> Dict.insert ( x, y ) Nothing
+                        )
+                        acc
+            )
+            points
 
 
 {-| @private
@@ -634,224 +780,6 @@ tracePath vertexes accum crossing mvd =
                     tracePath vertexes (current :: accum) crossing next
 
 
-{-| @private
-
-Base vertex combinations to be searched for every given point: (x, y).
-
-    *   S,E           S,W
-         _ _         _ _
-        |_|_|-------|_|_|
-        |_|           |_|
-        .             .
-        .             .
-         _             _
-        |_|_         _|_|
-        |_|_|-------|_|_|
-        N,E           N,W
-
--}
-findVertexes : Grid -> Set ( Int, Int ) -> List Vertex
-findVertexes grid outlineCells =
-    let
-        lineMap idx =
-            case idx of
-                1 ->
-                    North
-
-                2 ->
-                    South
-
-                3 ->
-                    East
-
-                4 ->
-                    West
-
-                _ ->
-                    Debug.crash "Invalid vertex line index."
-
-        vertexChecks ( x, y ) =
-            [ { outline = [ ( x, y - 1 ), ( x + 1, y ) ]
-              , space = [ ( x + 1, y - 1 ) ]
-              , lines = [ 1, 3 ]
-              }
-            , { outline = [ ( x, y - 1 ), ( x + 1, y ), ( x - 1, y ), ( x - 2, y ) ]
-              , space = [ ( x + 1, y - 1 ) ]
-              , lines = [ 1, 3, 4 ]
-              }
-            , { outline = [ ( x, y - 1 ), ( x + 1, y ) ]
-              , space = [ ( x - 1, y ), ( x - 1, y + 1 ), ( x, y + 1 ) ]
-              , lines = [ 1, 3 ]
-              }
-            , { outline = [ ( x + 1, y ), ( x, y + 1 ) ]
-              , space = [ ( x + 1, y + 1 ) ]
-              , lines = [ 2, 3 ]
-              }
-            , { outline = [ ( x + 1, y ), ( x, y + 1 ), ( x - 1, y ), ( x - 2, y ) ]
-              , space = [ ( x + 1, y + 1 ) ]
-              , lines = [ 2, 3, 4 ]
-              }
-            , { outline = [ ( x + 1, y ), ( x, y + 1 ) ]
-              , space = [ ( x - 1, y ), ( x - 1, y - 1 ), ( x, y - 1 ) ]
-              , lines = [ 2, 3 ]
-              }
-            , { outline = [ ( x, y + 1 ), ( x - 1, y ) ]
-              , space = [ ( x - 1, y + 1 ) ]
-              , lines = [ 2, 4 ]
-              }
-            , { outline = [ ( x, y + 1 ), ( x - 1, y ), ( x + 1, y ), ( x + 2, y ) ]
-              , space = [ ( x - 1, y + 1 ) ]
-              , lines = [ 2, 4, 3 ]
-              }
-            , { outline = [ ( x, y + 1 ), ( x - 1, y ) ]
-              , space = [ ( x, y - 1 ), ( x + 1, y - 1 ), ( x + 1, y ) ]
-              , lines = [ 2, 4 ]
-              }
-            , { outline = [ ( x - 1, y ), ( x, y - 1 ) ]
-              , space = [ ( x - 1, y - 1 ) ]
-              , lines = [ 1, 4 ]
-              }
-            , { outline = [ ( x - 1, y ), ( x, y - 1 ), ( x + 1, y ), ( x + 2, y ) ]
-              , space = [ ( x - 1, y - 1 ) ]
-              , lines = [ 1, 4, 3 ]
-              }
-            , { outline = [ ( x - 1, y ), ( x, y - 1 ) ]
-              , space = [ ( x + 1, y ), ( x + 1, y + 1 ), ( x, y + 1 ) ]
-              , lines = [ 1, 4 ]
-              }
-            ]
-
-        checkOutline coordPairs =
-            List.length coordPairs
-                == (coordPairs
-                        |> List.filter (\xy -> Set.member xy outlineCells)
-                        |> List.length
-                   )
-
-        checkSpace coordPairs =
-            List.length coordPairs
-                == (coordPairs
-                        |> List.filter (\xy -> Dict.get xy grid.cells |> EMaybe.join |> Cell.isSpace)
-                        |> List.length
-                   )
-
-        pointChecks ( x, y ) =
-            vertexChecks ( x, y )
-                |> List.filter (\vrec -> checkOutline vrec.outline && checkSpace vrec.space)
-                |> List.map (\vrec -> Set.fromList vrec.lines)
-                |> List.foldl (\s accum -> Set.union accum s) Set.empty
-                |> (\s -> Set.toList s |> List.map lineMap)
-
-        isVertex checks =
-            List.length checks >= 1
-    in
-    outlineCells
-        |> Set.foldl
-            (\xy accum ->
-                let
-                    pc =
-                        pointChecks xy
-
-                    ( x, y ) =
-                        xy
-                in
-                if isVertex pc then
-                    Vertex x y pc :: accum
-                else
-                    accum
-            )
-            []
-
-
-{-| @private
-Construct lines from vertexes, horizontal an vertical.
--}
-findLines : List Vertex -> List (List Vertex)
-findLines vertexes =
-    let
-        vertexSort primaryFn secondaryFn v1 v2 =
-            let
-                p1 =
-                    primaryFn v1
-
-                s1 =
-                    secondaryFn v1
-
-                p2 =
-                    primaryFn v2
-
-                s2 =
-                    secondaryFn v2
-            in
-            if p1 < p2 then
-                LT
-            else if p1 == p2 && s1 < s2 then
-                LT
-            else if p1 > p2 then
-                GT
-            else if p1 == p2 && s1 > s2 then
-                GT
-            else
-                EQ
-
-        groupPrimaries primaryFn vlist =
-            List.foldl
-                (\v accum ->
-                    case accum of
-                        [] ->
-                            [ v ] :: accum
-
-                        sublist :: rest ->
-                            List.head sublist
-                                |> Maybe.map
-                                    (\p ->
-                                        if primaryFn v == primaryFn p then
-                                            (v :: sublist) :: rest
-                                        else
-                                            [ v ] :: accum
-                                    )
-                                |> Maybe.withDefault accum
-                )
-                []
-                vlist
-
-        groupLines primaries =
-            List.foldl
-                (\pgroup accum ->
-                    if List.length pgroup > 1 then
-                        accum
-                            ++ List.foldl
-                                (\v a ->
-                                    case a of
-                                        [] ->
-                                            [ v ] :: a
-
-                                        lgrp :: rest ->
-                                            if List.length lgrp == 2 then
-                                                List.head lgrp
-                                                    |> Maybe.map (\p -> [ v, p ] :: a)
-                                                    |> Maybe.withDefault a
-                                            else
-                                                (v :: lgrp) :: rest
-                                )
-                                []
-                                pgroup
-                    else
-                        accum
-                )
-                []
-                primaries
-    in
-    (List.sortWith (vertexSort .y .x) vertexes
-        |> groupPrimaries .y
-        |> groupLines
-    )
-        ++ (List.sortWith (vertexSort .x .y) vertexes
-                |> groupPrimaries .x
-                |> groupLines
-           )
-
-
 inAnimation : Time -> Grid -> Bool
 inAnimation systemTick grid =
     grid.animation
@@ -978,6 +906,7 @@ movePlayer keyName grid =
                     ( Cell.trail grid.colors.trail cx cy |> Just
                     , ( cx, cy, keyName ) :: grid.trail
                     )
+
                 else
                     ( pc
                     , grid.trail
@@ -987,6 +916,7 @@ movePlayer keyName grid =
             ( grid
             , Task.succeed TakeLife |> Task.perform identity
             )
+
         else
             ( { grid
                 | cells =
@@ -1000,9 +930,11 @@ movePlayer keyName grid =
               }
             , if (Cell.isBorder priorCell || Cell.isConquest priorCell) && not (List.isEmpty grid.trail) then
                 Task.succeed Conquer |> Task.perform identity
+
               else
                 Cmd.none
             )
+
     else
         ( grid
         , Cmd.none
@@ -1042,6 +974,7 @@ nextBallPositions grid =
                         (\( _, cmd ) ->
                             if finalCmd == Cmd.none && cmd /= Cmd.none then
                                 cmd
+
                             else
                                 finalCmd
                         )
@@ -1074,14 +1007,17 @@ nextBallNE grid c =
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1 }
                 , Cmd.none
                 )
+
             else if Cell.isSpace leftCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
                 , Cmd.none
                 )
+
             else if Cell.isSpace rightCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
                 , Cmd.none
                 )
+
             else
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
                 , Cmd.none
@@ -1117,14 +1053,17 @@ nextBallNW grid c =
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1 }
                 , Cmd.none
                 )
+
             else if Cell.isSpace leftCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
                 , Cmd.none
                 )
+
             else if Cell.isSpace rightCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
                 , Cmd.none
                 )
+
             else
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
                 , Cmd.none
@@ -1160,14 +1099,17 @@ nextBallSE grid c =
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1 }
                 , Cmd.none
                 )
+
             else if Cell.isSpace leftCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
                 , Cmd.none
                 )
+
             else if Cell.isSpace rightCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
                 , Cmd.none
                 )
+
             else
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
                 , Cmd.none
@@ -1203,14 +1145,17 @@ nextBallSW grid c =
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1 }
                 , Cmd.none
                 )
+
             else if Cell.isSpace leftCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
                 , Cmd.none
                 )
+
             else if Cell.isSpace rightCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
                 , Cmd.none
                 )
+
             else
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
                 , Cmd.none
