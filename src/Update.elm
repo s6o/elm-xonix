@@ -1,8 +1,7 @@
-module Update
-    exposing
-        ( init
-        , update
-        )
+module Update exposing
+    ( init
+    , update
+    )
 
 import Grid
 import Keys exposing (KeyName, KeyState(..))
@@ -28,7 +27,6 @@ init =
       , levelFill = 0
       , lives = Model.maxLives
       , score = 0
-      , systemTick = 0
       , wsize = Nothing
       }
     , Cmd.batch
@@ -70,6 +68,7 @@ update msg model =
         LevelDown ->
             if model.level - 1 >= 1 then
                 setLevel (model.level - 1) model
+
             else
                 ( model
                 , Cmd.none
@@ -78,6 +77,7 @@ update msg model =
         LevelUp ->
             if model.level + 1 <= 15 then
                 setLevel (model.level + 1) model
+
             else
                 ( model
                 , Cmd.none
@@ -128,20 +128,20 @@ update msg model =
                         if Grid.inAnimation t model.grid then
                             { model
                                 | grid = Grid.animate t model.grid
-                                , systemTick = t
                             }
+
                         else
                             { model
                                 | grid =
                                     nextBallPos
                                         |> Grid.update model.grid
                                         |> Grid.initAnimation t
-                                , systemTick = t
                             }
                 in
                 ( newModel
                 , nextCmd
                 )
+
             else
                 ( model
                 , Cmd.none
@@ -155,6 +155,7 @@ update msg model =
                   }
                 , Cmd.none
                 )
+
             else
                 ( { model
                     | game = Stopped

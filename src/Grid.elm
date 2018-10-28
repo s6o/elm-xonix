@@ -117,24 +117,23 @@ conquerSpace grid =
             Debug.log "lines" (findLines2 outline)
 
         vertexes =
-            Debug.log "vertex cells" (findVertexes grid outline)
+            Debug.log "vertex cells" (findVertexes2 grid lines)
 
-        {-
-           polygons =
-               findPolygons vertexes
+        polygons =
+            findPolygons grid vertexes
 
-           polyLines =
-               let
-                   ( poly1, poly2 ) =
-                       polygons
-               in
-               ( Debug.log "poly 1 lines" (findLines poly1)
-               , Debug.log "poly 2 lines" (findLines poly2)
-               )
+        polyLines =
+            let
+                ( poly1, poly2 ) =
+                    polygons
+            in
+            ( Debug.log "poly 1 lines" (findLines poly1)
+            , Debug.log "poly 2 lines" (findLines poly2)
+            )
 
-           polysToFill =
-               findPolygonsToFill polyLines grid.balls
-        -}
+        polysToFill =
+            findPolygonsToFill polyLines grid.balls
+
         debugOutline ogrid =
             Set.foldl
                 (\key accum ->
@@ -161,16 +160,8 @@ conquerSpace grid =
                 vgrid
                 vertexes
     in
-    { grid | cells = debugOutline grid |> debugVertexes }
-
-
-
-{-
-   { grid | cells = fillPolygons polysToFill grid }
-       |> (\g ->
-               { g | cells = debugOutline g |> debugVertexes }
-          )
--}
+    --    { grid | cells = debugOutline grid |> debugVertexes }
+    { grid | cells = fillPolygons polysToFill grid, trail = [] }
 
 
 conquerTrail : Grid -> Grid
@@ -186,7 +177,8 @@ conquerTrail grid =
                             accum
                     )
                     grid.cells
-        , trail = []
+
+        --        , trail = []
     }
 
 
@@ -286,133 +278,89 @@ findOutlineCells grid =
 
 
 {-| @private
-
-Base vertex combinations to be searched for every given point: (x, y).
-
-    *   S,E           S,W
-         _ _         _ _
-        |_|_|-------|_|_|
-        |_|           |_|
-        .             .
-        .             .
-         _             _
-        |_|_         _|_|
-        |_|_|-------|_|_|
-        N,E           N,W
-
+Find (unique) vertexes with `VertexConnection`s from lines.
 -}
-findVertexes : Grid -> Set ( Int, Int ) -> List Vertex
-findVertexes grid outlineCells =
+findVertexes2 : Grid -> List ( Vertex, Vertex ) -> List Vertex
+findVertexes2 grid lines =
     let
-        lineMap idx =
-            case idx of
-                1 ->
-                    North
-
-                2 ->
-                    South
-
-                3 ->
-                    East
-
-                4 ->
-                    West
-
-                _ ->
-                    Debug.crash "Invalid vertex line index."
-
-        vertexChecks ( x, y ) =
-            [ { outline = [ ( x, y - 1 ), ( x + 1, y ) ]
-              , space = [ ( x + 1, y - 1 ) ]
-              , lines = [ 1, 3 ]
-              }
-            , { outline = [ ( x, y - 1 ), ( x + 1, y ), ( x - 1, y ), ( x - 2, y ) ]
-              , space = [ ( x + 1, y - 1 ) ]
-              , lines = [ 1, 3, 4 ]
-              }
-            , { outline = [ ( x, y - 1 ), ( x + 1, y ) ]
-              , space = [ ( x - 1, y ), ( x - 1, y + 1 ), ( x, y + 1 ) ]
-              , lines = [ 1, 3 ]
-              }
-            , { outline = [ ( x + 1, y ), ( x, y + 1 ) ]
-              , space = [ ( x + 1, y + 1 ) ]
-              , lines = [ 2, 3 ]
-              }
-            , { outline = [ ( x + 1, y ), ( x, y + 1 ), ( x - 1, y ), ( x - 2, y ) ]
-              , space = [ ( x + 1, y + 1 ) ]
-              , lines = [ 2, 3, 4 ]
-              }
-            , { outline = [ ( x + 1, y ), ( x, y + 1 ) ]
-              , space = [ ( x - 1, y ), ( x - 1, y - 1 ), ( x, y - 1 ) ]
-              , lines = [ 2, 3 ]
-              }
-            , { outline = [ ( x, y + 1 ), ( x - 1, y ) ]
-              , space = [ ( x - 1, y + 1 ) ]
-              , lines = [ 2, 4 ]
-              }
-            , { outline = [ ( x, y + 1 ), ( x - 1, y ), ( x + 1, y ), ( x + 2, y ) ]
-              , space = [ ( x - 1, y + 1 ) ]
-              , lines = [ 2, 4, 3 ]
-              }
-            , { outline = [ ( x, y + 1 ), ( x - 1, y ) ]
-              , space = [ ( x, y - 1 ), ( x + 1, y - 1 ), ( x + 1, y ) ]
-              , lines = [ 2, 4 ]
-              }
-            , { outline = [ ( x - 1, y ), ( x, y - 1 ) ]
-              , space = [ ( x - 1, y - 1 ) ]
-              , lines = [ 1, 4 ]
-              }
-            , { outline = [ ( x - 1, y ), ( x, y - 1 ), ( x + 1, y ), ( x + 2, y ) ]
-              , space = [ ( x - 1, y - 1 ) ]
-              , lines = [ 1, 4, 3 ]
-              }
-            , { outline = [ ( x - 1, y ), ( x, y - 1 ) ]
-              , space = [ ( x + 1, y ), ( x + 1, y + 1 ), ( x, y + 1 ) ]
-              , lines = [ 1, 4 ]
-              }
+        directions x y =
+            [ ( x + 1, y, East )
+            , ( x - 1, y, West )
+            , ( x, y + 1, South )
+            , ( x, y - 1, North )
             ]
 
-        checkOutline coordPairs =
-            List.length coordPairs
-                == (coordPairs
-                        |> List.filter (\xy -> Set.member xy outlineCells)
-                        |> List.length
-                   )
-
-        checkSpace coordPairs =
-            List.length coordPairs
-                == (coordPairs
-                        |> List.filter (\xy -> Dict.get xy grid.cells |> EMaybe.join |> Cell.isSpace)
-                        |> List.length
-                   )
-
-        pointChecks ( x, y ) =
-            vertexChecks ( x, y )
-                |> List.filter (\vrec -> checkOutline vrec.outline && checkSpace vrec.space)
-                |> List.map (\vrec -> Set.fromList vrec.lines)
-                |> List.foldl (\s accum -> Set.union accum s) Set.empty
-                |> (\s -> Set.toList s |> List.map lineMap)
-
-        isVertex checks =
-            List.length checks >= 1
+        trailCells =
+            grid.cells
+                |> Dict.filter (\_ mc -> Cell.isPlayer mc || Cell.isBorder mc || Cell.isConquest mc || Cell.isTrail mc)
     in
-    outlineCells
-        |> Set.foldl
-            (\xy accum ->
-                let
-                    pc =
-                        pointChecks xy
-
-                    ( x, y ) =
-                        xy
-                in
-                if isVertex pc then
-                    Vertex x y pc :: accum
-
-                else
-                    accum
+    lines
+        |> List.map (\( v1, v2 ) -> [ ( v1.x, v1.y ), ( v2.x, v2.y ) ])
+        |> List.concat
+        |> Set.fromList
+        |> Set.toList
+        |> List.map
+            (\( x, y ) ->
+                directions x y
+                    |> List.foldl
+                        (\( dx, dy, c ) acc ->
+                            trailCells
+                                |> Dict.get ( dx, dy )
+                                |> Maybe.map (\_ -> c :: acc)
+                                |> Maybe.withDefault acc
+                        )
+                        []
+                    |> (\connections -> Vertex x y connections)
             )
-            []
+        |> (\result ->
+                let
+                    _ =
+                        Debug.log "Vertex count" (List.length result)
+                in
+                result
+           )
+
+
+{-| @private
+Find vertex point candidates for polygons starts.
+-}
+vertexPointsFromTrail : ( Maybe ( Int, Int, KeyName ), Maybe ( Int, Int, KeyName ) ) -> ( Maybe ( Int, Int ), Maybe ( Int, Int ) )
+vertexPointsFromTrail ( tailEnd, tailStart ) =
+    ( case tailEnd of
+        Nothing ->
+            Nothing
+
+        Just ( tx, ty, key ) ->
+            case key of
+                KeyArrowDown ->
+                    Just ( tx, ty + 1 )
+
+                KeyArrowLeft ->
+                    Just ( tx - 1, ty )
+
+                KeyArrowRight ->
+                    Just ( tx + 1, ty )
+
+                KeyArrowUp ->
+                    Just ( tx, ty - 1 )
+    , case tailStart of
+        Nothing ->
+            Nothing
+
+        Just ( tx, ty, key ) ->
+            case key of
+                KeyArrowDown ->
+                    Just ( tx, ty - 1 )
+
+                KeyArrowLeft ->
+                    Just ( tx + 1, ty )
+
+                KeyArrowRight ->
+                    Just ( tx - 1, ty )
+
+                KeyArrowUp ->
+                    Just ( tx, ty + 1 )
+    )
 
 
 {-| @private
@@ -433,13 +381,35 @@ while the rest have two connections (`VertexLine`).
                 2.2.2) yes -> polygon complete
 
 -}
-findPolygons : List Vertex -> ( List Vertex, List Vertex )
-findPolygons vertexes =
+findPolygons : Grid -> List Vertex -> ( List Vertex, List Vertex )
+findPolygons grid vertexes =
     let
+        vertexCandidates =
+            ( List.head grid.trail
+            , grid.trail |> List.reverse |> List.head
+            )
+                |> vertexPointsFromTrail
+                |> (\( tvEnd, tvStart ) ->
+                        Maybe.map2 (\tv1 tv2 -> [ tv1, tv2 ])
+                            tvEnd
+                            tvStart
+                            |> Maybe.withDefault []
+                   )
+                |> List.foldl
+                    (\( tx, ty ) acc ->
+                        vertexes
+                            |> List.filter (\v -> tx == v.x && ty == v.y)
+                            |> List.head
+                            |> Maybe.map (\u -> u :: acc)
+                            |> Maybe.withDefault acc
+                    )
+                    []
+
         ( trailv1, trailv2 ) =
             Debug.log "Trail vertexes"
-                (vertexes
-                    |> List.filter (\r -> List.length r.c == 3)
+                (vertexCandidates
+                    |> List.filter (\v -> List.length v.c == 3)
+                    |> (\vxs -> Debug.log "3c vertexes" vxs)
                     |> (\tvl ->
                             case tvl of
                                 t1 :: t2 :: [] ->
@@ -670,18 +640,6 @@ fillPolygons ( polyArea1, polyArea2 ) grid =
 
 {-| @private
 -}
-orderLinesByX : ( Vertex, Vertex ) -> ( Vertex, Vertex ) -> Basics.Order
-orderLinesByX ( v1, _ ) ( v2, _ ) =
-    if v1.x < v2.x then
-        Basics.LT
-
-    else if v1.x > v2.x then
-        Basics.GT
-
-    else
-        Basics.EQ
-
-
 polyPoints : List ( Vertex, Vertex ) -> Dict ( Int, Int ) (Maybe Cell) -> Dict ( Int, Int ) (Maybe Cell)
 polyPoints lines points =
     case lines of
@@ -719,7 +677,7 @@ scanlinePoints ( vl1, vl2 ) ( vr, _ ) points =
 
 
 {-| @private
-Go from a `List VertexLine` e.g. [North-South-East] to sorted "-East-North-South"
+Go from a `List VertexLine` e.g. [North,South,East] to sorted "-East-North-South"
 -}
 directionString : List VertexConnection -> String
 directionString directions =
@@ -868,10 +826,6 @@ tracePath : List Vertex -> List Vertex -> Vertex -> Maybe ( Vertex, VertexConnec
 tracePath vertexes accum crossing mvd =
     case mvd of
         Nothing ->
-            let
-                _ =
-                    Debug.log "Missing next vertex and previous direction."
-            in
             []
 
         Just ( current, previousDirection ) ->

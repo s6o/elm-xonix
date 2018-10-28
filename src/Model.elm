@@ -1,12 +1,10 @@
-module Model
-    exposing
-        ( GameState(..)
-        , Model
-        , maxLives
-        )
+module Model exposing
+    ( GameState(..)
+    , Model
+    , maxLives
+    )
 
 import Grid exposing (Grid)
-import Time exposing (Time)
 import Window exposing (Size)
 
 
@@ -23,7 +21,6 @@ type alias Model =
     , levelFill : Int
     , lives : Int
     , score : Int
-    , systemTick : Time
     , wsize : Maybe Size
     }
 
