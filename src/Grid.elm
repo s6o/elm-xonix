@@ -3,7 +3,7 @@ module Grid exposing
     , Grid
     , Size
     , Vertex
-    , VertexLine
+    , VertexConnection
     , animate
     , clearTrail
     , conquer
@@ -74,11 +74,11 @@ type alias Size =
 type alias Vertex =
     { x : Int
     , y : Int
-    , lines : List VertexLine
+    , c : List VertexConnection
     }
 
 
-type VertexLine
+type VertexConnection
     = North
     | South
     | East
@@ -113,24 +113,28 @@ conquerSpace grid =
         outline =
             Debug.log "outline cells" (findOutlineCells grid)
 
+        lines =
+            Debug.log "lines" (findLines2 outline)
+
         vertexes =
             Debug.log "vertex cells" (findVertexes grid outline)
 
-        polygons =
-            findPolygons vertexes
+        {-
+           polygons =
+               findPolygons vertexes
 
-        polyLines =
-            let
-                ( poly1, poly2 ) =
-                    polygons
-            in
-            ( Debug.log "poly 1 lines" (findLines poly1)
-            , Debug.log "poly 2 lines" (findLines poly2)
-            )
+           polyLines =
+               let
+                   ( poly1, poly2 ) =
+                       polygons
+               in
+               ( Debug.log "poly 1 lines" (findLines poly1)
+               , Debug.log "poly 2 lines" (findLines poly2)
+               )
 
-        polysToFill =
-            findPolygonsToFill polyLines grid.balls
-
+           polysToFill =
+               findPolygonsToFill polyLines grid.balls
+        -}
         debugOutline ogrid =
             Set.foldl
                 (\key accum ->
@@ -157,10 +161,16 @@ conquerSpace grid =
                 vgrid
                 vertexes
     in
-    { grid | cells = fillPolygons polysToFill grid }
-        |> (\g ->
-                { g | cells = debugOutline g |> debugVertexes }
-           )
+    { grid | cells = debugOutline grid |> debugVertexes }
+
+
+
+{-
+   { grid | cells = fillPolygons polysToFill grid }
+       |> (\g ->
+               { g | cells = debugOutline g |> debugVertexes }
+          )
+-}
 
 
 conquerTrail : Grid -> Grid
@@ -429,7 +439,7 @@ findPolygons vertexes =
         ( trailv1, trailv2 ) =
             Debug.log "Trail vertexes"
                 (vertexes
-                    |> List.filter (\r -> List.length r.lines == 3)
+                    |> List.filter (\r -> List.length r.c == 3)
                     |> (\tvl ->
                             case tvl of
                                 t1 :: t2 :: [] ->
@@ -465,6 +475,105 @@ findPolygons vertexes =
                 )
     in
     ( poly1, poly2 )
+
+
+nextLinePoint : (Vertex -> Int) -> Vertex -> Vertex -> Bool
+nextLinePoint axisFn cVertex pVertex =
+    axisFn cVertex - axisFn pVertex == 1
+
+
+pointPartition : (( Int, Int ) -> Int) -> (( Int, Int ) -> Int) -> List ( Int, Int ) -> List (List ( Int, Int ))
+pointPartition partFn sortFn points =
+    points
+        |> List.foldl
+            (\point ( mpp, part, partitions ) ->
+                case mpp of
+                    Nothing ->
+                        ( Just point, [ point ], partitions )
+
+                    Just pp ->
+                        if partFn pp == partFn point then
+                            ( Just point, point :: part, partitions )
+
+                        else
+                            ( Just point, [ point ], part :: partitions )
+            )
+            ( Nothing, [], [] )
+        |> (\( _, lastpart, partitions ) -> lastpart :: partitions)
+        |> List.map (\part -> List.sortBy (\pnt -> sortFn pnt) part)
+
+
+partitionLines : (Vertex -> Int) -> List ( Int, Int ) -> List ( Vertex, Vertex )
+partitionLines axisFn points =
+    points
+        |> List.foldl
+            (\( x, y ) ( mline, partitions ) ->
+                case mline of
+                    ( Nothing, Nothing ) ->
+                        ( ( Just (Vertex x y []), Nothing ), partitions )
+
+                    ( Nothing, Just _ ) ->
+                        ( mline, partitions )
+
+                    ( Just v1, Nothing ) ->
+                        if nextLinePoint axisFn (Vertex x y []) v1 then
+                            ( ( Just v1, Just (Vertex x y []) ), partitions )
+
+                        else
+                            ( ( Just (Vertex x y []), Nothing ), partitions )
+
+                    ( Just v1, Just v2 ) ->
+                        if nextLinePoint axisFn (Vertex x y []) v2 then
+                            ( ( Just v1, Just (Vertex x y []) ), partitions )
+
+                        else
+                            ( ( Just (Vertex x y []), Nothing ), ( v1, v2 ) :: partitions )
+            )
+            ( ( Nothing, Nothing ), [] )
+        |> (\( ( mv1, mv2 ), partitions ) ->
+                Maybe.map2 (\v1 v2 -> ( v1, v2 ) :: partitions)
+                    mv1
+                    mv2
+                    |> Maybe.withDefault partitions
+           )
+
+
+{-| @private
+-}
+findLines2 : Set ( Int, Int ) -> List ( Vertex, Vertex )
+findLines2 outline =
+    let
+        horizontal =
+            outline
+                |> Set.toList
+                |> List.sortBy (\( _, y ) -> y)
+                |> pointPartition Tuple.second Tuple.first
+                |> List.map (partitionLines .x)
+                |> List.concat
+                |> (\result ->
+                        let
+                            _ =
+                                Debug.log "H lines: " (List.length result)
+                        in
+                        result
+                   )
+
+        vertical =
+            outline
+                |> Set.toList
+                |> List.sortBy (\( x, _ ) -> x)
+                |> pointPartition Tuple.first Tuple.second
+                |> List.map (partitionLines .y)
+                |> List.concat
+                |> (\result ->
+                        let
+                            _ =
+                                Debug.log "V lines: " (List.length result)
+                        in
+                        result
+                   )
+    in
+    horizontal ++ vertical
 
 
 {-| @private
@@ -612,7 +721,7 @@ scanlinePoints ( vl1, vl2 ) ( vr, _ ) points =
 {-| @private
 Go from a `List VertexLine` e.g. [North-South-East] to sorted "-East-North-South"
 -}
-directionString : List VertexLine -> String
+directionString : List VertexConnection -> String
 directionString directions =
     directions
         |> List.map Basics.toString
@@ -622,7 +731,7 @@ directionString directions =
 
 {-| @private
 -}
-directionPredicate : VertexLine -> Vertex -> Vertex -> Bool
+directionPredicate : VertexConnection -> Vertex -> Vertex -> Bool
 directionPredicate direction start current =
     case direction of
         East ->
@@ -640,7 +749,7 @@ directionPredicate direction start current =
 
 {-| @private
 -}
-directionSorter : VertexLine -> Vertex -> Vertex -> Order
+directionSorter : VertexConnection -> Vertex -> Vertex -> Order
 directionSorter direction va vb =
     case direction of
         East ->
@@ -674,9 +783,9 @@ directionSorter direction va vb =
 
 {-| @private
 -}
-directionClockwise : Vertex -> VertexLine
+directionClockwise : Vertex -> VertexConnection
 directionClockwise v =
-    case directionString v.lines of
+    case directionString v.c of
         "-East-North-South" ->
             North
 
@@ -695,9 +804,9 @@ directionClockwise v =
 
 {-| @private
 -}
-directionTrail : Vertex -> VertexLine
+directionTrail : Vertex -> VertexConnection
 directionTrail v =
-    case directionString v.lines of
+    case directionString v.c of
         "-East-North-South" ->
             East
 
@@ -719,7 +828,7 @@ Except for 2 trail vertexes, all other vertexes have 2 line connections.
 Eliminate the (line) direction from which "a tracer" arrived and returned the
 next (remaining) direction.
 -}
-nextDirection : ( Vertex, VertexLine ) -> Maybe VertexLine
+nextDirection : ( Vertex, VertexConnection ) -> Maybe VertexConnection
 nextDirection ( vertex, prevdir ) =
     let
         arraival =
@@ -736,7 +845,7 @@ nextDirection ( vertex, prevdir ) =
                 West ->
                     East
     in
-    vertex.lines
+    vertex.c
         |> List.filter (\d -> d /= arraival)
         |> List.head
 
@@ -744,7 +853,7 @@ nextDirection ( vertex, prevdir ) =
 {-| @private
 Given a vertex point and direction, trace to the next vertex point and arraival direction.
 -}
-nextVertex : List Vertex -> Vertex -> VertexLine -> Maybe ( Vertex, VertexLine )
+nextVertex : List Vertex -> Vertex -> VertexConnection -> Maybe ( Vertex, VertexConnection )
 nextVertex vertexes start direction =
     vertexes
         |> List.filter (directionPredicate direction start)
@@ -755,7 +864,7 @@ nextVertex vertexes start direction =
 
 {-| @private
 -}
-tracePath : List Vertex -> List Vertex -> Vertex -> Maybe ( Vertex, VertexLine ) -> List Vertex
+tracePath : List Vertex -> List Vertex -> Vertex -> Maybe ( Vertex, VertexConnection ) -> List Vertex
 tracePath vertexes accum crossing mvd =
     case mvd of
         Nothing ->
