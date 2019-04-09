@@ -2,7 +2,7 @@ module Keys
     exposing
         ( KeyName(..)
         , KeyState(..)
-            )
+        )
 
 
 type KeyName

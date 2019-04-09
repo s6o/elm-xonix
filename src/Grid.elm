@@ -1,19 +1,20 @@
-module Grid exposing
-    ( Colors
-    , Grid
-    , Size
-    , Vertex
-    , VertexConnection
-    , animate
-    , clearTrail
-    , conquer
-    , inAnimation
-    , init
-    , initAnimation
-    , movePlayer
-    , nextBallPositions
-    , update
-    )
+module Grid
+    exposing
+        ( Colors
+        , Grid
+        , Size
+        , Vertex
+        , VertexConnection
+        , animate
+        , clearTrail
+        , conquer
+        , inAnimation
+        , init
+        , initAnimation
+        , movePlayer
+        , nextBallPositions
+        , update
+        )
 
 import Animation exposing (Animation)
 import Array
@@ -101,10 +102,25 @@ ballCollision nextCell priorCell =
         || (Cell.isPlayer nextCell && not (playerInsideBorder nextCell priorCell))
 
 
+
+{- Realized that, the border needs to shift to were the (new) trail was cut.
+   The old (outer most) border will become part of conquered space.
+
+   Thus, first conquerSpace:
+       * find outline points
+       * find lines from outline points
+       * find vertexes from lines
+       * find the 2 polygons via vertexes (and lines)
+       * check which of the 2 polygons can be filled (contain no balls)
+       * fill (conquer) polygons without balls - in fill, remember to exclude trail
+       * fill trail to be the new border
+-}
+
+
 conquer : Grid -> Grid
 conquer grid =
-    conquerTrail grid
-        |> conquerSpace
+    --conquerTrail grid
+    conquerSpace grid
 
 
 conquerSpace : Grid -> Grid
@@ -114,7 +130,7 @@ conquerSpace grid =
             Debug.log "outline cells" (findOutlineCells grid)
 
         lines =
-            Debug.log "lines" (findLines2 outline)
+            Debug.log "lines" (findLines outline)
 
         vertexes =
             Debug.log "vertex cells" (findVertexes2 grid lines)
@@ -127,14 +143,14 @@ conquerSpace grid =
                 ( poly1, poly2 ) =
                     polygons
             in
-            ( Debug.log "poly 1 lines" (findLines poly1)
-            , Debug.log "poly 2 lines" (findLines poly2)
+            ( Debug.log "poly 1 lines" (findVerticalLines poly1)
+            , Debug.log "poly 2 lines" (findVerticalLines poly2)
             )
 
         polysToFill =
             findPolygonsToFill polyLines grid.balls
 
-        debugOutline ogrid =
+        debugOutline ol ogrid =
             Set.foldl
                 (\key accum ->
                     case Dict.get key grid.cells |> EMaybe.join of
@@ -145,9 +161,9 @@ conquerSpace grid =
                             accum
                 )
                 ogrid.cells
-                outline
+                ol
 
-        debugVertexes vgrid =
+        debugVertexes vtxs vgrid =
             List.foldl
                 (\{ x, y } accum ->
                     case Dict.get ( x, y ) vgrid |> EMaybe.join of
@@ -158,10 +174,14 @@ conquerSpace grid =
                             accum
                 )
                 vgrid
-                vertexes
+                vtxs
     in
-    --    { grid | cells = debugOutline grid |> debugVertexes }
-    { grid | cells = fillPolygons polysToFill grid, trail = [] }
+    grid
+        {-
+           |> (\g -> { g | cells = debugOutline outline g |> debugVertexes vertexes })
+           |> (\g -> { g | cells = g.cells |> Dict.map (\( x, y ) mc -> mc |> Maybe.map (\c -> { c | color = Color.darkGrey })) })
+        -}
+        |> (\g -> { g | cells = fillPolygons polysToFill g, trail = [] })
 
 
 conquerTrail : Grid -> Grid
@@ -173,7 +193,7 @@ conquerTrail grid =
                     (\( x, y, _ ) accum ->
                         Dict.insert
                             ( x, y )
-                            (Cell.conquest grid.colors.conquest x y |> Just)
+                            (Cell.border grid.colors.border x y |> Just)
                             accum
                     )
                     grid.cells
@@ -252,7 +272,6 @@ findOutlineCells grid =
                             Just mc ->
                                 if Cell.isSpace mc then
                                     pnt :: accum
-
                                 else
                                     accum
 
@@ -265,12 +284,11 @@ findOutlineCells grid =
             List.length sides >= 1
     in
     grid.cells
-        |> Dict.filter (\_ mc -> Cell.isPlayer mc || Cell.isBorder mc || Cell.isConquest mc)
+        |> Dict.filter (\_ mc -> Cell.isPlayer mc || Cell.isBorder mc || Cell.isTrail mc)
         |> Dict.foldl
             (\key _ accum ->
                 if freeSides key |> isOutlineCell then
                     Set.insert key accum
-
                 else
                     accum
             )
@@ -330,36 +348,42 @@ vertexPointsFromTrail ( tailEnd, tailStart ) =
         Nothing ->
             Nothing
 
-        Just ( tx, ty, key ) ->
-            case key of
-                KeyArrowDown ->
-                    Just ( tx, ty + 1 )
+        Just ( tx, ty, _ ) ->
+            Just ( tx, ty )
+      {-
+         case key of
+             KeyArrowDown ->
+                 Just ( tx, ty + 1 )
 
-                KeyArrowLeft ->
-                    Just ( tx - 1, ty )
+             KeyArrowLeft ->
+                 Just ( tx - 1, ty )
 
-                KeyArrowRight ->
-                    Just ( tx + 1, ty )
+             KeyArrowRight ->
+                 Just ( tx + 1, ty )
 
-                KeyArrowUp ->
-                    Just ( tx, ty - 1 )
+             KeyArrowUp ->
+                 Just ( tx, ty - 1 )
+      -}
     , case tailStart of
         Nothing ->
             Nothing
 
-        Just ( tx, ty, key ) ->
-            case key of
-                KeyArrowDown ->
-                    Just ( tx, ty - 1 )
+        Just ( tx, ty, _ ) ->
+            Just ( tx, ty )
+      {-
+         case key of
+             KeyArrowDown ->
+                 Just ( tx, ty - 1 )
 
-                KeyArrowLeft ->
-                    Just ( tx + 1, ty )
+             KeyArrowLeft ->
+                 Just ( tx + 1, ty )
 
-                KeyArrowRight ->
-                    Just ( tx - 1, ty )
+             KeyArrowRight ->
+                 Just ( tx - 1, ty )
 
-                KeyArrowUp ->
-                    Just ( tx, ty + 1 )
+             KeyArrowUp ->
+                 Just ( tx, ty + 1 )
+      -}
     )
 
 
@@ -388,7 +412,8 @@ findPolygons grid vertexes =
             ( List.head grid.trail
             , grid.trail |> List.reverse |> List.head
             )
-                |> vertexPointsFromTrail
+                |> Debug.log "Vertex Points Trail"
+                >> vertexPointsFromTrail
                 |> (\( tvEnd, tvStart ) ->
                         Maybe.map2 (\tv1 tv2 -> [ tv1, tv2 ])
                             tvEnd
@@ -407,7 +432,7 @@ findPolygons grid vertexes =
 
         ( trailv1, trailv2 ) =
             Debug.log "Trail vertexes"
-                (vertexCandidates
+                (Debug.log "All Vertex Candidates" vertexCandidates
                     |> List.filter (\v -> List.length v.c == 3)
                     |> (\vxs -> Debug.log "3c vertexes" vxs)
                     |> (\tvl ->
@@ -464,7 +489,6 @@ pointPartition partFn sortFn points =
                     Just pp ->
                         if partFn pp == partFn point then
                             ( Just point, point :: part, partitions )
-
                         else
                             ( Just point, [ point ], part :: partitions )
             )
@@ -488,14 +512,12 @@ partitionLines axisFn points =
                     ( Just v1, Nothing ) ->
                         if nextLinePoint axisFn (Vertex x y []) v1 then
                             ( ( Just v1, Just (Vertex x y []) ), partitions )
-
                         else
                             ( ( Just (Vertex x y []), Nothing ), partitions )
 
                     ( Just v1, Just v2 ) ->
                         if nextLinePoint axisFn (Vertex x y []) v2 then
                             ( ( Just v1, Just (Vertex x y []) ), partitions )
-
                         else
                             ( ( Just (Vertex x y []), Nothing ), ( v1, v2 ) :: partitions )
             )
@@ -510,8 +532,8 @@ partitionLines axisFn points =
 
 {-| @private
 -}
-findLines2 : Set ( Int, Int ) -> List ( Vertex, Vertex )
-findLines2 outline =
+findLines : Set ( Int, Int ) -> List ( Vertex, Vertex )
+findLines outline =
     let
         horizontal =
             outline
@@ -549,8 +571,8 @@ findLines2 outline =
 {-| @private
 Construct lines, filter out horizontal lines, order line vertexes by y axis.
 -}
-findLines : List Vertex -> List ( Vertex, Vertex )
-findLines vertexes =
+findVerticalLines : List Vertex -> List ( Vertex, Vertex )
+findVerticalLines vertexes =
     let
         connector vs lines =
             case vs of
@@ -605,7 +627,6 @@ findPolygonsToFill ( polyLines1, polyLines2 ) balls =
                     (\ball _ points ->
                         if Dict.isEmpty points then
                             Dict.empty
-
                         else
                             points
                                 |> Dict.get ball
@@ -902,10 +923,12 @@ initPlayer : Grid -> Grid
 initPlayer grid =
     let
         px =
-            grid.size.width // 2
+            --grid.size.width // 2
+            0
 
         py =
-            grid.size.height - 1
+            --grid.size.height - 1
+            0
 
         priorCell =
             Dict.get ( px, py ) grid.cells
@@ -942,7 +965,7 @@ movePlayer : KeyName -> Grid -> ( Grid, Cmd Msg )
 movePlayer keyName grid =
     let
         ( ( cx, cy ), pc ) =
-            grid.priorPlayer
+            Debug.log "PriorPlayer" grid.priorPlayer
 
         ( px, py ) =
             case keyName of
@@ -965,11 +988,14 @@ movePlayer keyName grid =
                     |> EMaybe.join
 
             ( restoreCell, updatedTrail ) =
-                if Cell.isSpace pc then
+                if Cell.isSpace priorCell then
                     ( Cell.trail grid.colors.trail cx cy |> Just
                     , ( cx, cy, keyName ) :: grid.trail
                     )
-
+                else if not <| List.isEmpty grid.trail && (Cell.isBorder priorCell || Cell.isConquest priorCell) then
+                    ( Cell.trail grid.colors.trail cx cy |> Just
+                    , ( px, py, keyName ) :: ( cx, cy, keyName ) :: grid.trail
+                    )
                 else
                     ( pc
                     , grid.trail
@@ -979,7 +1005,6 @@ movePlayer keyName grid =
             ( grid
             , Task.succeed TakeLife |> Task.perform identity
             )
-
         else
             ( { grid
                 | cells =
@@ -989,15 +1014,13 @@ movePlayer keyName grid =
                             ( px, py )
                             (\_ -> Just <| Just <| Cell.player grid.colors.player px py)
                 , priorPlayer = ( ( px, py ), priorCell )
-                , trail = updatedTrail
+                , trail = Debug.log "Trail" updatedTrail
               }
             , if (Cell.isBorder priorCell || Cell.isConquest priorCell) && not (List.isEmpty grid.trail) then
                 Task.succeed Conquer |> Task.perform identity
-
               else
                 Cmd.none
             )
-
     else
         ( grid
         , Cmd.none
@@ -1037,7 +1060,6 @@ nextBallPositions grid =
                         (\( _, cmd ) ->
                             if finalCmd == Cmd.none && cmd /= Cmd.none then
                                 cmd
-
                             else
                                 finalCmd
                         )
@@ -1070,17 +1092,14 @@ nextBallNE grid c =
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1 }
                 , Cmd.none
                 )
-
             else if Cell.isSpace leftCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
                 , Cmd.none
                 )
-
             else if Cell.isSpace rightCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
                 , Cmd.none
                 )
-
             else
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
                 , Cmd.none
@@ -1116,17 +1135,14 @@ nextBallNW grid c =
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1 }
                 , Cmd.none
                 )
-
             else if Cell.isSpace leftCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
                 , Cmd.none
                 )
-
             else if Cell.isSpace rightCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
                 , Cmd.none
                 )
-
             else
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
                 , Cmd.none
@@ -1162,17 +1178,14 @@ nextBallSE grid c =
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1 }
                 , Cmd.none
                 )
-
             else if Cell.isSpace leftCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
                 , Cmd.none
                 )
-
             else if Cell.isSpace rightCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1, shape = Ball SW }
                 , Cmd.none
                 )
-
             else
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
                 , Cmd.none
@@ -1208,17 +1221,14 @@ nextBallSW grid c =
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY + 1 }
                 , Cmd.none
                 )
-
             else if Cell.isSpace leftCell then
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY + 1, shape = Ball SE }
                 , Cmd.none
                 )
-
             else if Cell.isSpace rightCell then
                 ( { c | cellX = c.cellX - 1, cellY = c.cellY - 1, shape = Ball NW }
                 , Cmd.none
                 )
-
             else
                 ( { c | cellX = c.cellX + 1, cellY = c.cellY - 1, shape = Ball NE }
                 , Cmd.none
