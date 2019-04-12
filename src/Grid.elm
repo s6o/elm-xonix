@@ -25,7 +25,6 @@ import Keys exposing (KeyName(..))
 import Maybe.Extra as EMaybe
 import Messages exposing (Msg(..))
 import Random exposing (Generator, Seed)
-import Set exposing (Set)
 import Task exposing (Task)
 import Time exposing (Time)
 
@@ -86,6 +85,12 @@ type VertexConnection
     | West
 
 
+type alias Turns =
+    { count : Int
+    , directions : List VertexConnection
+    }
+
+
 animate : Time -> Grid -> Grid
 animate systemTick grid =
     { grid
@@ -102,21 +107,20 @@ ballCollision nextCell priorCell =
         || (Cell.isPlayer nextCell && not (playerInsideBorder nextCell priorCell))
 
 
+{-| Realized that, the border needs to shift to were the (new) trail was cut.
+The old (outer most) border will become part of conquered space.
 
-{- Realized that, the border needs to shift to were the (new) trail was cut.
-   The old (outer most) border will become part of conquered space.
+Thus, first conquerSpace:
 
-   Thus, first conquerSpace:
-       * find outline points
-       * find lines from outline points
-       * find vertexes from lines
-       * find the 2 polygons via vertexes (and lines)
-       * check which of the 2 polygons can be filled (contain no balls)
-       * fill (conquer) polygons without balls - in fill, remember to exclude trail
-       * fill trail to be the new border
+  - find outline points
+  - find lines from outline points
+  - find vertexes from lines
+  - find the 2 polygons via vertexes (and lines)
+  - check which of the 2 polygons can be filled (contain no balls)
+  - fill (conquer) polygons without balls - in fill, remember to exclude trail
+  - fill trail to be the new border
+
 -}
-
-
 conquer : Grid -> Grid
 conquer grid =
     --conquerTrail grid
@@ -126,62 +130,39 @@ conquer grid =
 conquerSpace : Grid -> Grid
 conquerSpace grid =
     let
-        outline =
-            Debug.log "outline cells" (findOutlineCells grid)
+        vertexes =
+            Debug.log "vertexes" (findVertexes grid)
 
         lines =
-            Debug.log "lines" (findLines outline)
-
-        vertexes =
-            Debug.log "vertex cells" (findVertexes2 grid lines)
+            Debug.log "lines" (findLines vertexes)
 
         polygons =
-            findPolygons grid vertexes
+            Debug.log "polygons" findPolyVertexes grid vertexes
 
-        polyLines =
-            let
-                ( poly1, poly2 ) =
-                    polygons
-            in
-            ( Debug.log "poly 1 lines" (findVerticalLines poly1)
-            , Debug.log "poly 2 lines" (findVerticalLines poly2)
-            )
+        {-
 
-        polysToFill =
-            findPolygonsToFill polyLines grid.balls
+           polyLines =
+               let
+                   ( poly1, poly2 ) =
+                       polygons
+               in
+               ( Debug.log "poly 1 lines" (findPolyLines poly1 lines)
+               , Debug.log "poly 2 lines" (findPolyLines poly2 lines)
+               )
 
-        debugOutline ol ogrid =
-            Set.foldl
-                (\key accum ->
-                    case Dict.get key grid.cells |> EMaybe.join of
-                        Just c ->
-                            Dict.update key (\_ -> Just <| Just { c | color = Color.green }) accum
-
-                        Nothing ->
-                            accum
-                )
-                ogrid.cells
-                ol
-
-        debugVertexes vtxs vgrid =
-            List.foldl
-                (\{ x, y } accum ->
-                    case Dict.get ( x, y ) vgrid |> EMaybe.join of
-                        Just c ->
-                            Dict.update ( x, y ) (\_ -> Just <| Just { c | color = Color.blue }) accum
-
-                        Nothing ->
-                            accum
-                )
-                vgrid
-                vtxs
+           polysToFill =
+               findPolygonsToFill polyLines grid.balls
+        -}
     in
     grid
-        {-
-           |> (\g -> { g | cells = debugOutline outline g |> debugVertexes vertexes })
-           |> (\g -> { g | cells = g.cells |> Dict.map (\( x, y ) mc -> mc |> Maybe.map (\c -> { c | color = Color.darkGrey })) })
-        -}
-        |> (\g -> { g | cells = fillPolygons polysToFill g, trail = [] })
+
+
+
+{-
+      |> (\g -> { g | cells = debugOutline outline g |> debugVertexes vertexes })
+      |> (\g -> { g | cells = g.cells |> Dict.map (\( x, y ) mc -> mc |> Maybe.map (\c -> { c | color = Color.darkGrey })) })
+   |> (\g -> { g | cells = fillPolygons polysToFill g, trail = [] })
+-}
 
 
 conquerTrail : Grid -> Grid
@@ -248,152 +229,87 @@ empty =
 
 
 {-| @private
-Find all cells (points) that make up the 2 polygons with a common trail.
 -}
-findOutlineCells : Grid -> Set ( Int, Int )
-findOutlineCells grid =
+countTurns : Dict ( Int, Int ) (Maybe Cell) -> ( Int, Int ) -> Turns
+countTurns cells point =
     let
-        sidePoints ( x, y ) =
-            [ ( x + 1, y )
-            , ( x - 1, y )
-            , ( x, y - 1 )
-            , ( x, y + 1 )
-            , ( x + 1, y - 1 )
-            , ( x + 1, y + 1 )
-            , ( x - 1, y + 1 )
-            , ( x - 1, y - 1 )
+        turnPoints ( x, y ) =
+            [ { p1 = ( x + 1, y )
+              , p2 = ( x, y + 1 )
+              , space = ( x + 1, y + 1 )
+              , dirs = [ East, South ]
+              }
+            , { p1 = ( x, y + 1 )
+              , p2 = ( x - 1, y )
+              , space = ( x - 1, y + 1 )
+              , dirs = [ South, West ]
+              }
+            , { p1 = ( x - 1, y )
+              , p2 = ( x, y - 1 )
+              , space = ( x - 1, y - 1 )
+              , dirs = [ North, West ]
+              }
+            , { p1 = ( x, y - 1 )
+              , p2 = ( x + 1, y )
+              , space = ( x + 1, y - 1 )
+              , dirs = [ East, North ]
+              }
             ]
-
-        freeSides ( x, y ) =
-            sidePoints ( x, y )
-                |> List.foldl
-                    (\pnt accum ->
-                        case Dict.get pnt grid.cells of
-                            Just mc ->
-                                if Cell.isSpace mc then
-                                    pnt :: accum
-                                else
-                                    accum
-
-                            Nothing ->
-                                accum
-                    )
-                    []
-
-        isOutlineCell sides =
-            List.length sides >= 1
     in
+    turnPoints point
+        |> List.foldl
+            (\{ p1, p2, space, dirs } accum ->
+                case ( Dict.get p1 cells, Dict.get p2 cells, Dict.get space cells ) of
+                    ( Just mc1, Just mc2, Just mcs ) ->
+                        if (Cell.isBorder mc1 || Cell.isTrail mc1) && (Cell.isBorder mc2 || Cell.isTrail mc2) && Cell.isSpace mcs then
+                            { accum
+                                | count = accum.count + 1
+                                , directions =
+                                    dirs
+                                        |> List.foldl
+                                            (\dir a ->
+                                                a
+                                                    |> List.filter (\d -> d == dir)
+                                                    |> List.head
+                                                    |> Maybe.map (\_ -> a)
+                                                    |> Maybe.withDefault (dir :: a)
+                                            )
+                                            accum.directions
+                            }
+                        else
+                            accum
+
+                    _ ->
+                        accum
+            )
+            { count = 0, directions = [] }
+
+
+findVertexes : Grid -> List Vertex
+findVertexes grid =
     grid.cells
         |> Dict.filter (\_ mc -> Cell.isPlayer mc || Cell.isBorder mc || Cell.isTrail mc)
         |> Dict.foldl
-            (\key _ accum ->
-                if freeSides key |> isOutlineCell then
-                    Set.insert key accum
+            (\( cx, cy ) _ accum ->
+                let
+                    { count, directions } =
+                        countTurns grid.cells ( cx, cy )
+                in
+                if count >= 1 then
+                    { x = cx, y = cy, c = directions } :: accum
                 else
                     accum
             )
-            Set.empty
-
-
-{-| @private
-Find (unique) vertexes with `VertexConnection`s from lines.
--}
-findVertexes2 : Grid -> List ( Vertex, Vertex ) -> List Vertex
-findVertexes2 grid lines =
-    let
-        directions x y =
-            [ ( x + 1, y, East )
-            , ( x - 1, y, West )
-            , ( x, y + 1, South )
-            , ( x, y - 1, North )
-            ]
-
-        trailCells =
-            grid.cells
-                |> Dict.filter (\_ mc -> Cell.isPlayer mc || Cell.isBorder mc || Cell.isConquest mc || Cell.isTrail mc)
-    in
-    lines
-        |> List.map (\( v1, v2 ) -> [ ( v1.x, v1.y ), ( v2.x, v2.y ) ])
-        |> List.concat
-        |> Set.fromList
-        |> Set.toList
-        |> List.map
-            (\( x, y ) ->
-                directions x y
-                    |> List.foldl
-                        (\( dx, dy, c ) acc ->
-                            trailCells
-                                |> Dict.get ( dx, dy )
-                                |> Maybe.map (\_ -> c :: acc)
-                                |> Maybe.withDefault acc
-                        )
-                        []
-                    |> (\connections -> Vertex x y connections)
-            )
-        |> (\result ->
-                let
-                    _ =
-                        Debug.log "Vertex count" (List.length result)
-                in
-                result
-           )
-
-
-{-| @private
-Find vertex point candidates for polygons starts.
--}
-vertexPointsFromTrail : ( Maybe ( Int, Int, KeyName ), Maybe ( Int, Int, KeyName ) ) -> ( Maybe ( Int, Int ), Maybe ( Int, Int ) )
-vertexPointsFromTrail ( tailEnd, tailStart ) =
-    ( case tailEnd of
-        Nothing ->
-            Nothing
-
-        Just ( tx, ty, _ ) ->
-            Just ( tx, ty )
-      {-
-         case key of
-             KeyArrowDown ->
-                 Just ( tx, ty + 1 )
-
-             KeyArrowLeft ->
-                 Just ( tx - 1, ty )
-
-             KeyArrowRight ->
-                 Just ( tx + 1, ty )
-
-             KeyArrowUp ->
-                 Just ( tx, ty - 1 )
-      -}
-    , case tailStart of
-        Nothing ->
-            Nothing
-
-        Just ( tx, ty, _ ) ->
-            Just ( tx, ty )
-      {-
-         case key of
-             KeyArrowDown ->
-                 Just ( tx, ty - 1 )
-
-             KeyArrowLeft ->
-                 Just ( tx + 1, ty )
-
-             KeyArrowRight ->
-                 Just ( tx - 1, ty )
-
-             KeyArrowUp ->
-                 Just ( tx, ty + 1 )
-      -}
-    )
+            []
 
 
 {-| @private
 
 A trail left by the player, dividing the empty area will always create 2 polygons.
 There are 2 vertexes, at each end of the trail, that have 3 line connections,
-while the rest have two connections (`VertexLine`).
+while the rest have two connections.
 
-      * 1) find trail vertexes
+      * 1) find the 2 trail vertexes
         2) for each trail vertex
             2.1) trace next vertex in clockwise direction not on the trail
             2.2) is (the new) vertex equal to the other trail vertex (crossing) ?
@@ -405,45 +321,26 @@ while the rest have two connections (`VertexLine`).
                 2.2.2) yes -> polygon complete
 
 -}
-findPolygons : Grid -> List Vertex -> ( List Vertex, List Vertex )
-findPolygons grid vertexes =
+findPolyVertexes : Grid -> List Vertex -> ( List Vertex, List Vertex )
+findPolyVertexes grid vertexes =
     let
-        vertexCandidates =
-            ( List.head grid.trail
-            , grid.trail |> List.reverse |> List.head
-            )
-                |> Debug.log "Vertex Points Trail"
-                >> vertexPointsFromTrail
-                |> (\( tvEnd, tvStart ) ->
-                        Maybe.map2 (\tv1 tv2 -> [ tv1, tv2 ])
-                            tvEnd
-                            tvStart
-                            |> Maybe.withDefault []
-                   )
-                |> List.foldl
-                    (\( tx, ty ) acc ->
-                        vertexes
-                            |> List.filter (\v -> tx == v.x && ty == v.y)
-                            |> List.head
-                            |> Maybe.map (\u -> u :: acc)
-                            |> Maybe.withDefault acc
-                    )
-                    []
+        findTrailVertex ( x, y, _ ) =
+            vertexes
+                |> List.filter (\v -> v.x == x && v.y == y && List.length v.c == 3)
+                |> List.head
+                |> Maybe.map Basics.identity
 
         ( trailv1, trailv2 ) =
-            Debug.log "Trail vertexes"
-                (Debug.log "All Vertex Candidates" vertexCandidates
-                    |> List.filter (\v -> List.length v.c == 3)
-                    |> (\vxs -> Debug.log "3c vertexes" vxs)
-                    |> (\tvl ->
-                            case tvl of
-                                t1 :: t2 :: [] ->
-                                    ( t1, t2 )
-
-                                _ ->
-                                    Debug.crash "Something is wrong in vertex logic, expecting 2 trail vertexes"
-                       )
-                )
+            ( grid.trail
+                |> List.head
+                |> Maybe.map findTrailVertex
+                |> EMaybe.join
+            , grid.trail
+                |> List.reverse
+                |> List.head
+                |> Maybe.map findTrailVertex
+                |> EMaybe.join
+            )
 
         poly1 =
             Debug.log "poly1"
@@ -472,76 +369,69 @@ findPolygons grid vertexes =
     ( poly1, poly2 )
 
 
-nextLinePoint : (Vertex -> Int) -> Vertex -> Vertex -> Bool
-nextLinePoint axisFn cVertex pVertex =
-    axisFn cVertex - axisFn pVertex == 1
+vertexPairs : (Vertex -> Int) -> List ( Vertex, Vertex ) -> List Vertex -> List ( Vertex, Vertex )
+vertexPairs sortAxisFn accum vertexes =
+    case vertexes of
+        [] ->
+            accum
+
+        v :: [] ->
+            accum
+
+        v1 :: v2 :: [] ->
+            if sortAxisFn v1 == sortAxisFn v2 then
+                ( v1, v2 ) :: accum
+            else
+                accum
+
+        v1 :: v2 :: rest ->
+            let
+                nextAccum =
+                    if sortAxisFn v1 == sortAxisFn v2 then
+                        ( v1, v2 ) :: accum
+                    else
+                        accum
+            in
+            vertexPairs sortAxisFn nextAccum (v2 :: rest)
 
 
-pointPartition : (( Int, Int ) -> Int) -> (( Int, Int ) -> Int) -> List ( Int, Int ) -> List (List ( Int, Int ))
-pointPartition partFn sortFn points =
-    points
-        |> List.foldl
-            (\point ( mpp, part, partitions ) ->
-                case mpp of
-                    Nothing ->
-                        ( Just point, [ point ], partitions )
-
-                    Just pp ->
-                        if partFn pp == partFn point then
-                            ( Just point, point :: part, partitions )
-                        else
-                            ( Just point, [ point ], part :: partitions )
-            )
-            ( Nothing, [], [] )
-        |> (\( _, lastpart, partitions ) -> lastpart :: partitions)
-        |> List.map (\part -> List.sortBy (\pnt -> sortFn pnt) part)
+orderByX : Vertex -> Vertex -> Order
+orderByX vl vr =
+    if vl.x > vr.x then
+        GT
+    else if vl.x < vr.x then
+        LT
+    else if vl.y == vr.y then
+        EQ
+    else if vl.y > vr.y then
+        GT
+    else
+        LT
 
 
-partitionLines : (Vertex -> Int) -> List ( Int, Int ) -> List ( Vertex, Vertex )
-partitionLines axisFn points =
-    points
-        |> List.foldl
-            (\( x, y ) ( mline, partitions ) ->
-                case mline of
-                    ( Nothing, Nothing ) ->
-                        ( ( Just (Vertex x y []), Nothing ), partitions )
-
-                    ( Nothing, Just _ ) ->
-                        ( mline, partitions )
-
-                    ( Just v1, Nothing ) ->
-                        if nextLinePoint axisFn (Vertex x y []) v1 then
-                            ( ( Just v1, Just (Vertex x y []) ), partitions )
-                        else
-                            ( ( Just (Vertex x y []), Nothing ), partitions )
-
-                    ( Just v1, Just v2 ) ->
-                        if nextLinePoint axisFn (Vertex x y []) v2 then
-                            ( ( Just v1, Just (Vertex x y []) ), partitions )
-                        else
-                            ( ( Just (Vertex x y []), Nothing ), ( v1, v2 ) :: partitions )
-            )
-            ( ( Nothing, Nothing ), [] )
-        |> (\( ( mv1, mv2 ), partitions ) ->
-                Maybe.map2 (\v1 v2 -> ( v1, v2 ) :: partitions)
-                    mv1
-                    mv2
-                    |> Maybe.withDefault partitions
-           )
+orderByY : Vertex -> Vertex -> Order
+orderByY vl vr =
+    if vl.y > vr.y then
+        GT
+    else if vl.y < vr.y then
+        LT
+    else if vl.x == vr.x then
+        EQ
+    else if vl.x > vr.x then
+        GT
+    else
+        LT
 
 
 {-| @private
 -}
-findLines : Set ( Int, Int ) -> List ( Vertex, Vertex )
-findLines outline =
+findLines : List Vertex -> List ( Vertex, Vertex )
+findLines vertexes =
     let
         horizontal =
-            outline
-                |> Set.toList
-                |> List.sortBy (\( _, y ) -> y)
-                |> pointPartition Tuple.second Tuple.first
-                |> List.map (partitionLines .x)
-                |> List.concat
+            vertexes
+                |> List.sortWith orderByY
+                |> vertexPairs .y []
                 |> (\result ->
                         let
                             _ =
@@ -551,12 +441,9 @@ findLines outline =
                    )
 
         vertical =
-            outline
-                |> Set.toList
-                |> List.sortBy (\( x, _ ) -> x)
-                |> pointPartition Tuple.first Tuple.second
-                |> List.map (partitionLines .y)
-                |> List.concat
+            vertexes
+                |> List.sortWith orderByX
+                |> vertexPairs .x []
                 |> (\result ->
                         let
                             _ =
@@ -569,40 +456,20 @@ findLines outline =
 
 
 {-| @private
-Construct lines, filter out horizontal lines, order line vertexes by y axis.
+Given a list of polygon vertexes and total lines, filter out polygon lines.
 -}
-findVerticalLines : List Vertex -> List ( Vertex, Vertex )
-findVerticalLines vertexes =
+findPolyLines : List Vertex -> List ( Vertex, Vertex ) -> List ( Vertex, Vertex )
+findPolyLines vertexes lines =
     let
-        connector vs lines =
-            case vs of
-                [] ->
-                    lines
-
-                v1 :: next ->
-                    case next of
-                        [] ->
-                            lines
-
-                        v2 :: rest ->
-                            connector next (( v1, v2 ) :: lines)
+        isMember v =
+            vertexes
+                |> List.filter (\vx -> vx.x == v.x && vx.y == v.y && vx.c == v.c)
+                |> List.head
+                |> Maybe.map (\_ -> True)
+                |> Maybe.withDefault False
     in
-    List.head vertexes
-        |> Maybe.map
-            (\h ->
-                connector (vertexes ++ [ h ]) []
-                    |> List.filter (\( v1, v2 ) -> v1.x == v2.x)
-                    |> List.map
-                        (\( v1, v2 ) ->
-                            case v1.y <= v2.y of
-                                False ->
-                                    ( v2, v1 )
-
-                                True ->
-                                    ( v1, v2 )
-                        )
-            )
-        |> Maybe.withDefault []
+    lines
+        |> List.filter (\( v1, v2 ) -> isMember v1 && isMember v2)
 
 
 {-| @private
@@ -762,44 +629,54 @@ directionSorter direction va vb =
 
 {-| @private
 -}
-directionClockwise : Vertex -> VertexConnection
-directionClockwise v =
-    case directionString v.c of
-        "-East-North-South" ->
-            North
+directionClockwise : Maybe Vertex -> VertexConnection
+directionClockwise mv =
+    case mv of
+        Nothing ->
+            Debug.crash "Missing Trail vertex"
 
-        "-East-North-West" ->
-            West
+        Just v ->
+            case directionString v.c of
+                "-East-North-South" ->
+                    North
 
-        "-East-South-West" ->
-            East
+                "-East-North-West" ->
+                    West
 
-        "-North-South-West" ->
-            South
+                "-East-South-West" ->
+                    East
 
-        _ ->
-            Debug.crash "Could not find clockwise trace direction from trail's vertex"
+                "-North-South-West" ->
+                    South
+
+                _ ->
+                    Debug.crash "Could not find clockwise trace direction from trail's vertex"
 
 
 {-| @private
 -}
-directionTrail : Vertex -> VertexConnection
-directionTrail v =
-    case directionString v.c of
-        "-East-North-South" ->
-            East
+directionTrail : Maybe Vertex -> VertexConnection
+directionTrail mv =
+    case mv of
+        Nothing ->
+            Debug.crash "Missing Trail vertex"
 
-        "-East-North-West" ->
-            North
+        Just v ->
+            case directionString v.c of
+                "-East-North-South" ->
+                    East
 
-        "-East-South-West" ->
-            South
+                "-East-North-West" ->
+                    North
 
-        "-North-South-West" ->
-            West
+                "-East-South-West" ->
+                    South
 
-        _ ->
-            Debug.crash "Could not find clockwise trace direction from trail's vertex"
+                "-North-South-West" ->
+                    West
+
+                _ ->
+                    Debug.crash "Could not find clockwise trace direction from trail's vertex"
 
 
 {-| @private
@@ -832,36 +709,46 @@ nextDirection ( vertex, prevdir ) =
 {-| @private
 Given a vertex point and direction, trace to the next vertex point and arraival direction.
 -}
-nextVertex : List Vertex -> Vertex -> VertexConnection -> Maybe ( Vertex, VertexConnection )
-nextVertex vertexes start direction =
-    vertexes
-        |> List.filter (directionPredicate direction start)
-        |> List.sortWith (directionSorter direction)
-        |> List.head
-        |> Maybe.map (\v -> ( v, direction ))
+nextVertex : List Vertex -> Maybe Vertex -> VertexConnection -> Maybe ( Vertex, VertexConnection )
+nextVertex vertexes mv direction =
+    case mv of
+        Nothing ->
+            Debug.crash "Missing Trail vertex"
+
+        Just start ->
+            vertexes
+                |> List.filter (directionPredicate direction start)
+                |> List.sortWith (directionSorter direction)
+                |> List.head
+                |> Maybe.map (\v -> ( v, direction ))
 
 
 {-| @private
 -}
-tracePath : List Vertex -> List Vertex -> Vertex -> Maybe ( Vertex, VertexConnection ) -> List Vertex
-tracePath vertexes accum crossing mvd =
-    case mvd of
+tracePath : List Vertex -> List Vertex -> Maybe Vertex -> Maybe ( Vertex, VertexConnection ) -> List Vertex
+tracePath vertexes accum mv mvd =
+    case mv of
         Nothing ->
-            []
+            Debug.crash "Missing Trail vertex"
 
-        Just ( current, previousDirection ) ->
-            case current == crossing of
-                True ->
-                    current :: accum
+        Just crossing ->
+            case mvd of
+                Nothing ->
+                    []
 
-                False ->
-                    let
-                        next =
-                            nextDirection ( current, previousDirection )
-                                |> Maybe.map (nextVertex vertexes current)
-                                |> EMaybe.join
-                    in
-                    tracePath vertexes (current :: accum) crossing next
+                Just ( current, previousDirection ) ->
+                    case current == crossing of
+                        True ->
+                            current :: accum
+
+                        False ->
+                            let
+                                next =
+                                    nextDirection ( current, previousDirection )
+                                        |> Maybe.map (nextVertex vertexes (Just current))
+                                        |> EMaybe.join
+                            in
+                            tracePath vertexes (current :: accum) (Just crossing) next
 
 
 inAnimation : Time -> Grid -> Bool
