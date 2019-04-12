@@ -136,20 +136,20 @@ conquerSpace grid =
         lines =
             Debug.log "lines" (findLines vertexes)
 
-        polygons =
+        ( poly1, poly2 ) =
             Debug.log "polygons" findPolyVertexes grid vertexes
 
+        ( polyLines1, polyLines2 ) =
+            ( Debug.log "poly 1 lines" (findPolyLines poly1 lines)
+            , Debug.log "poly 2 lines" (findPolyLines poly2 lines)
+            )
+
+        ( polyPoints1, polyPoints2 ) =
+            ( Debug.log "poly 1 points" (findPolyPoints grid poly1 polyLines1)
+            , Debug.log "poly 2 points" (findPolyPoints grid poly2 polyLines2)
+            )
+
         {-
-
-           polyLines =
-               let
-                   ( poly1, poly2 ) =
-                       polygons
-               in
-               ( Debug.log "poly 1 lines" (findPolyLines poly1 lines)
-               , Debug.log "poly 2 lines" (findPolyLines poly2 lines)
-               )
-
            polysToFill =
                findPolygonsToFill polyLines grid.balls
         -}
@@ -470,6 +470,118 @@ findPolyLines vertexes lines =
     in
     lines
         |> List.filter (\( v1, v2 ) -> isMember v1 && isMember v2)
+        |> (\l ->
+                let
+                    _ =
+                        Debug.log "Poly line count" (List.length l)
+                in
+                l
+           )
+
+
+{-| @private
+Given trail, polygon vertexes and edges, find all points inside the polygon.
+
+  - the search area for points is the surrounding bounding box for the polygon
+  - return empty list if 'search space' contains balls
+  - eliminate Trail points from the final result, as trail will be the new border
+    and not part of the conquered space
+  - ray casting based on <http://philliplemons.com/posts/ray-casting-algorithm>
+
+-}
+findPolyPoints : Grid -> List Vertex -> List ( Vertex, Vertex ) -> List ( Int, Int )
+findPolyPoints grid polyVertexes edges =
+    let
+        trailPoints =
+            grid.trail
+                |> List.map (\( x, y, _ ) -> ( x, y ))
+
+        ( xmin, xmax ) =
+            polyVertexes
+                |> List.sortWith orderByX
+                |> List.map .x
+                |> (\l -> ( List.minimum l |> Maybe.withDefault 0, List.maximum l |> Maybe.withDefault 0 ))
+                |> Debug.log "xmin, xmax"
+
+        ( ymin, ymax ) =
+            polyVertexes
+                |> List.sortWith orderByY
+                |> List.map .y
+                |> (\l -> ( List.minimum l |> Maybe.withDefault 0, List.maximum l |> Maybe.withDefault 0 ))
+                |> Debug.log "ymin, ymax"
+
+        xbounds =
+            Array.initialize (xmax - xmin + 1) identity
+                |> Array.toList
+                |> Debug.log "xbounds"
+
+        ybounds =
+            Array.initialize (ymax - ymin + 1) identity
+                |> Array.toList
+                |> Debug.log "ybounds"
+
+        edgeAB ( v1, v2 ) =
+            if v1.y <= v2.y then
+                ( v1, v2 )
+            else
+                ( v2, v1 )
+
+        isPolyPoint ( x, y ) =
+            edges
+                |> List.foldl
+                    (\e inside ->
+                        let
+                            ( a, b ) =
+                                edgeAB e
+                        in
+                        if y == a.y || y == b.y then
+                            not inside
+                        else if y > b.y || y < a.y || x > Basics.max a.x b.x then
+                            inside
+                        else if x < Basics.min a.x b.x then
+                            not inside
+                        else
+                            inside
+                    )
+                    False
+
+        searchSpace =
+            xbounds
+                |> List.foldl
+                    (\xbi accum ->
+                        ybounds
+                            |> List.foldl (\ybi a -> ( xmin + xbi, ymin + ybi ) :: a) accum
+                    )
+                    []
+
+        selectSearchSpace =
+            grid.balls
+                |> List.foldl
+                    (\mc inside ->
+                        mc
+                            |> Maybe.map (\c -> List.member ( c.cellX, c.cellY ) searchSpace)
+                            |> Maybe.withDefault False
+                    )
+                    False
+                |> (\ballsFound ->
+                        if ballsFound then
+                            []
+                        else
+                            searchSpace
+                   )
+    in
+    selectSearchSpace
+        |> List.foldl
+            (\point accum ->
+                case isPolyPoint point of
+                    False ->
+                        accum
+
+                    True ->
+                        point :: accum
+            )
+            []
+        |> List.filter (\p -> List.member p trailPoints |> not)
 
 
 {-| @private
