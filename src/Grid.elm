@@ -242,22 +242,26 @@ countTurns : Dict ( Int, Int ) (Maybe Cell) -> ( Int, Int ) -> Turns
 countTurns cells point =
     let
         turnPoints ( x, y ) =
-            [ { p1 = ( x + 1, y )
+            [ { p = ( x, y )
+              , p1 = ( x + 1, y )
               , p2 = ( x, y + 1 )
               , space = ( x + 1, y + 1 )
               , dirs = [ East, South ]
               }
-            , { p1 = ( x, y + 1 )
+            , { p = ( x, y )
+              , p1 = ( x, y + 1 )
               , p2 = ( x - 1, y )
               , space = ( x - 1, y + 1 )
               , dirs = [ South, West ]
               }
-            , { p1 = ( x - 1, y )
+            , { p = ( x, y )
+              , p1 = ( x - 1, y )
               , p2 = ( x, y - 1 )
               , space = ( x - 1, y - 1 )
               , dirs = [ North, West ]
               }
-            , { p1 = ( x, y - 1 )
+            , { p = ( x, y )
+              , p1 = ( x, y - 1 )
               , p2 = ( x + 1, y )
               , space = ( x + 1, y - 1 )
               , dirs = [ East, North ]
@@ -266,10 +270,10 @@ countTurns cells point =
     in
     turnPoints point
         |> List.foldl
-            (\{ p1, p2, space, dirs } accum ->
-                case ( Dict.get p1 cells, Dict.get p2 cells, Dict.get space cells ) of
-                    ( Just mc1, Just mc2, Just mcs ) ->
-                        if (Cell.isBorder mc1 || Cell.isTrail mc1) && (Cell.isBorder mc2 || Cell.isTrail mc2) && Cell.isSpace mcs then
+            (\{ p, p1, p2, space, dirs } accum ->
+                case ( Dict.get p cells, Dict.get p1 cells, Dict.get p2 cells, Dict.get space cells ) of
+                    ( Just mc, Just mc1, Just mc2, Just mcs ) ->
+                        if (Cell.isBorder mc || Cell.isTrail mc || Cell.isPlayer mc) && (Cell.isBorder mc1 || Cell.isTrail mc1) && (Cell.isBorder mc2 || Cell.isTrail mc2) && Cell.isSpace mcs then
                             { accum
                                 | count = accum.count + 1
                                 , directions =
