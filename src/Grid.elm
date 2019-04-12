@@ -123,8 +123,8 @@ Thus, first conquerSpace:
 -}
 conquer : Grid -> Grid
 conquer grid =
-    --conquerTrail grid
     conquerSpace grid
+        |> conquerTrail
 
 
 conquerSpace : Grid -> Grid
@@ -148,38 +148,33 @@ conquerSpace grid =
             ( Debug.log "poly 1 points" (findPolyPoints grid poly1 polyLines1)
             , Debug.log "poly 2 points" (findPolyPoints grid poly2 polyLines2)
             )
-
-        {-
-           polysToFill =
-               findPolygonsToFill polyLines grid.balls
-        -}
     in
     grid
-
-
-
-{-
-      |> (\g -> { g | cells = debugOutline outline g |> debugVertexes vertexes })
-      |> (\g -> { g | cells = g.cells |> Dict.map (\( x, y ) mc -> mc |> Maybe.map (\c -> { c | color = Color.darkGrey })) })
-   |> (\g -> { g | cells = fillPolygons polysToFill g, trail = [] })
--}
+        |> fillPolyPoints polyPoints1
+        |> fillPolyPoints polyPoints2
 
 
 conquerTrail : Grid -> Grid
 conquerTrail grid =
+    let
+        ( ( px, py ), _ ) =
+            grid.priorPlayer
+    in
     { grid
         | cells =
             grid.trail
                 |> List.foldl
                     (\( x, y, _ ) accum ->
-                        Dict.insert
-                            ( x, y )
-                            (Cell.border grid.colors.border x y |> Just)
-                            accum
+                        accum
+                            |> Dict.insert
+                                ( x, y )
+                                (Cell.border grid.colors.border x y |> Just)
+                            |> Dict.insert
+                                ( px, py )
+                                (Cell.player grid.colors.player px py |> Just)
                     )
                     grid.cells
-
-        --        , trail = []
+        , trail = []
     }
 
 
@@ -195,7 +190,20 @@ clearTrail grid =
                 |> List.foldl
                     (\( x, y, _ ) accum -> Dict.insert ( x, y ) Nothing accum)
                     grid.cells
-                |> (\cells -> Dict.insert ( px, py ) Nothing cells)
+                |> (\gcells ->
+                        let
+                            mt1 =
+                                grid.trail |> List.reverse |> List.head
+                        in
+                        Maybe.map
+                            (\( t1x, t1y, _ ) ->
+                                gcells
+                                    |> Dict.insert ( t1x, t1y ) (Cell.border grid.colors.border t1x t1y |> Just)
+                                    |> Dict.insert ( px, py ) Nothing
+                            )
+                            mt1
+                            |> Maybe.withDefault gcells
+                   )
         , trail = []
     }
         |> initPlayer
@@ -585,95 +593,21 @@ findPolyPoints grid polyVertexes edges =
 
 
 {-| @private
-Given 2 polygons as its vertical lines, check if scanpoints contain balls.
-If no balls are found in scanpoints return the polygon as scanpoints dictionary,
-otherwise return an empty dictionary.
 -}
-findPolygonsToFill : ( List ( Vertex, Vertex ), List ( Vertex, Vertex ) ) -> List (Maybe Cell) -> ( Dict ( Int, Int ) (Maybe Cell), Dict ( Int, Int ) (Maybe Cell) )
-findPolygonsToFill ( polyLines1, polyLines2 ) balls =
-    let
-        polyArea lines =
-            balls
-                |> List.map
-                    (\mc ->
-                        mc
-                            |> Maybe.map (\c -> ( ( c.cellX, c.cellY ), True ))
-                            |> Maybe.withDefault ( ( 0, 0 ), False )
+fillPolyPoints : List ( Int, Int ) -> Grid -> Grid
+fillPolyPoints polyPoints grid =
+    { grid
+        | cells =
+            polyPoints
+                |> List.foldl
+                    (\( x, y ) accum ->
+                        Dict.insert
+                            ( x, y )
+                            (Cell.conquest grid.colors.conquest x y |> Just)
+                            accum
                     )
-                |> List.filter (\( _, flag ) -> flag)
-                |> Dict.fromList
-                |> Dict.foldl
-                    (\ball _ points ->
-                        if Dict.isEmpty points then
-                            Dict.empty
-                        else
-                            points
-                                |> Dict.get ball
-                                |> Maybe.map (\_ -> Dict.empty)
-                                |> Maybe.withDefault points
-                    )
-                    (polyPoints lines Dict.empty)
-    in
-    ( polyArea polyLines1
-    , polyArea polyLines2
-    )
-
-
-{-| @private
--}
-fillPolygons : ( Dict ( Int, Int ) (Maybe Cell), Dict ( Int, Int ) (Maybe Cell) ) -> Grid -> Dict ( Int, Int ) (Maybe Cell)
-fillPolygons ( polyArea1, polyArea2 ) grid =
-    let
-        fillCells area cells =
-            area
-                |> Dict.foldl
-                    (\( x, y ) _ acc ->
-                        acc
-                            |> Dict.insert ( x, y ) (Cell.conquest grid.colors.conquest x y |> Just)
-                    )
-                    cells
-    in
-    grid.cells
-        |> fillCells polyArea1
-        |> fillCells polyArea2
-
-
-{-| @private
--}
-polyPoints : List ( Vertex, Vertex ) -> Dict ( Int, Int ) (Maybe Cell) -> Dict ( Int, Int ) (Maybe Cell)
-polyPoints lines points =
-    case lines of
-        [] ->
-            points
-
-        leftLine :: restlines ->
-            case restlines of
-                [] ->
-                    points
-
-                rightLine :: rest ->
-                    scanlinePoints leftLine rightLine points
-                        |> polyPoints rest
-
-
-{-| @private
--}
-scanlinePoints : ( Vertex, Vertex ) -> ( Vertex, Vertex ) -> Dict ( Int, Int ) (Maybe Cell) -> Dict ( Int, Int ) (Maybe Cell)
-scanlinePoints ( vl1, vl2 ) ( vr, _ ) points =
-    Array.initialize (vr.x - vl1.x - 1) (\n -> vl1.x + n + 1)
-        |> Array.toList
-        |> List.foldl
-            (\x acc ->
-                Array.initialize (vl2.y - vl1.y - 1) (\n -> vl1.y + n + 1)
-                    |> Array.toList
-                    |> List.foldl
-                        (\y xy ->
-                            xy
-                                |> Dict.insert ( x, y ) Nothing
-                        )
-                        acc
-            )
-            points
+                    grid.cells
+    }
 
 
 {-| @private
