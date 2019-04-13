@@ -125,10 +125,7 @@ Thus, first conquerSpace:
 conquer : Grid -> Grid
 conquer grid =
     conquerSpace grid
-
-
-
---        |> conquerTrail
+        |> conquerTrail
 
 
 conquerSpace : Grid -> Grid
@@ -138,54 +135,64 @@ conquerSpace grid =
             Debug.log "outline" (findOutline grid)
 
         vertexes =
-            Debug.log "vertexes" (findVertexes outline)
+            findVertexes outline
+                |> findVertexDirections
+
+        d0 =
+            Debug.log "vertexes" vertexes
+
+        d1 =
+            Debug.log "h. sort vertexes" (vertexes |> List.sortWith orderByYAsc)
+
+        d2 =
+            Debug.log "v. sort vertexes" (vertexes |> List.sortWith orderByXAsc)
+
+        lines =
+            Debug.log "lines" (findLines vertexes)
+
+        ( poly1, poly2 ) =
+            findPolyVertexes grid vertexes
+
+        d3 =
+            Debug.log "poly 1 vertexes" poly1
+
+        d4 =
+            Debug.log "poly 2 vertexes" poly1
+
+        ( polyLines1, polyLines2 ) =
+            ( Debug.log "poly 1 lines" (findPolyLines poly1 lines)
+            , Debug.log "poly 2 lines" (findPolyLines poly2 lines)
+            )
+
+        ( polyPoints1, polyPoints2 ) =
+            ( Debug.log "poly 1 points" (findPolyPoints grid poly1 polyLines1)
+            , Debug.log "poly 2 points" (findPolyPoints grid poly2 polyLines2)
+            )
 
         {-
-           lines =
-               Debug.log "lines" (findLines vertexes)
+           colorOutline grid =
+               { grid
+                   | cells =
+                       grid.cells
+                           |> Dict.map (\xy mc -> mc |> Maybe.map (\c -> { c | color = Color.darkPurple }))
+               }
 
-           ( poly1, poly2 ) =
-               Debug.log "polygons" findPolyVertexes grid vertexes
-
-           ( polyLines1, polyLines2 ) =
-               ( Debug.log "poly 1 lines" (findPolyLines poly1 lines)
-               , Debug.log "poly 2 lines" (findPolyLines poly2 lines)
-               )
-
-           ( polyPoints1, polyPoints2 ) =
-               ( Debug.log "poly 1 points" (findPolyPoints grid poly1 polyLines1)
-               , Debug.log "poly 2 points" (findPolyPoints grid poly2 polyLines2)
-               )
+           colorVertex grid =
+               { grid
+                   | cells =
+                       vertexes
+                           |> List.foldl
+                               (\{ x, y } accum ->
+                                   accum
+                                       |> Dict.insert ( x, y ) (Cell.border Color.darkYellow x y |> Just)
+                               )
+                               grid.cells
+               }
         -}
-        colorOutline grid =
-            { grid
-                | cells =
-                    grid.cells
-                        |> Dict.map (\xy mc -> mc |> Maybe.map (\c -> { c | color = Color.darkPurple }))
-            }
-
-        colorVertex grid =
-            { grid
-                | cells =
-                    vertexes
-                        |> List.foldl
-                            (\{ x, y } accum ->
-                                accum
-                                    |> Dict.insert ( x, y ) (Cell.border Color.darkYellow x y |> Just)
-                            )
-                            grid.cells
-            }
     in
     grid
-        |> colorOutline
-        |> colorVertex
-
-
-
-{-
-   |> fillPolyPoints polyPoints1
-   |> fillPolyPoints polyPoints2
--}
+        |> fillPolyPoints polyPoints1
+        |> fillPolyPoints polyPoints2
 
 
 conquerTrail : Grid -> Grid
@@ -305,7 +312,7 @@ countSpace cells point =
 
 {-| @private
 -}
-countTurns : Dict ( Int, Int ) ( Int, Int ) -> ( Int, Int ) -> Turns
+countTurns : Dict ( Int, Int ) ( Int, Int ) -> ( Int, Int ) -> Int
 countTurns outline point =
     let
         turnPoints ( x, y ) =
@@ -313,60 +320,43 @@ countTurns outline point =
               , p1 = ( x + 1, y )
               , p2 = ( x, y + 1 )
               , space = ( x + 1, y + 1 )
-              , dirs = [ East, South ]
               }
             , { p = ( x, y )
               , p1 = ( x, y + 1 )
               , p2 = ( x - 1, y )
               , space = ( x - 1, y + 1 )
-              , dirs = [ South, West ]
               }
             , { p = ( x, y )
               , p1 = ( x - 1, y )
               , p2 = ( x, y - 1 )
               , space = ( x - 1, y - 1 )
-              , dirs = [ North, West ]
               }
             , { p = ( x, y )
               , p1 = ( x, y - 1 )
               , p2 = ( x + 1, y )
               , space = ( x + 1, y - 1 )
-              , dirs = [ East, North ]
               }
             ]
 
-        accumulate r p dirs =
-            { r
-                | count_set = Set.insert p r.count_set
-                , directions =
-                    dirs
-                        |> List.foldl
-                            (\dir a ->
-                                a
-                                    |> List.filter (\d -> d == dir)
-                                    |> List.head
-                                    |> Maybe.map (\_ -> a)
-                                    |> Maybe.withDefault (dir :: a)
-                            )
-                            r.directions
-            }
+        accumulate s p =
+            Set.insert p s
     in
     turnPoints point
         |> List.foldl
-            (\{ p, p1, p2, space, dirs } accum ->
+            (\{ p, p1, p2, space } accum ->
                 case ( Dict.get p1 outline, Dict.get p2 outline, Dict.get space outline ) of
                     ( Just mc1, Just mc2, Nothing ) ->
-                        accumulate accum p dirs
+                        Set.insert p accum
 
                     -- This handles special case of a double trail - no spacing between to trails
                     ( Nothing, Nothing, Nothing ) ->
-                        accumulate accum p dirs
+                        Set.insert p accum
 
                     _ ->
                         accum
             )
-            { count_set = Set.empty, directions = [] }
-        |> (\{ count_set, directions } -> { count = Set.size count_set, directions = directions })
+            Set.empty
+        |> (\s -> Set.size s)
 
 
 {-| @private
@@ -386,6 +376,8 @@ findOutline grid =
         |> Set.toList
 
 
+{-| @private
+-}
 findVertexes : List ( Int, Int ) -> List Vertex
 findVertexes outline =
     let
@@ -397,16 +389,66 @@ findVertexes outline =
     outDict
         |> Dict.foldl
             (\( cx, cy ) _ accum ->
-                let
-                    { count, directions } =
-                        countTurns outDict ( cx, cy )
-                in
-                if count >= 1 then
-                    { x = cx, y = cy, c = directions } :: accum
+                if countTurns outDict ( cx, cy ) >= 1 then
+                    { x = cx, y = cy, c = [] } :: accum
                 else
                     accum
             )
             []
+
+
+{-| @private
+-}
+findVertexDirections : List Vertex -> List Vertex
+findVertexDirections vertexes =
+    let
+        searchDirs =
+            [ { dir = East
+              , orderFn = orderByYAsc
+              , axisFn = .y
+              , filterFn = \v vv -> v.x < vv.x && v.y == vv.y
+              }
+            , { dir = West
+              , orderFn = orderByYDesc
+              , axisFn = .y
+              , filterFn = \v vv -> v.x > vv.x && v.y == vv.y
+              }
+            , { dir = South
+              , orderFn = orderByXAsc
+              , axisFn = .x
+              , filterFn = \v vv -> v.x == vv.x && v.y < vv.y
+              }
+            , { dir = North
+              , orderFn = orderByXDesc
+              , axisFn = .x
+              , filterFn = \v vv -> v.x == vv.x && v.y > vv.y
+              }
+            ]
+    in
+    vertexes
+        |> List.map
+            (\v ->
+                { v
+                    | c =
+                        searchDirs
+                            |> List.foldl
+                                (\{ dir, orderFn, axisFn, filterFn } dirs ->
+                                    vertexes
+                                        |> List.filter (filterFn v)
+                                        |> List.sortWith orderFn
+                                        |> List.head
+                                        |> Maybe.map
+                                            (\vh ->
+                                                if axisFn vh == axisFn v then
+                                                    dir :: dirs
+                                                else
+                                                    dirs
+                                            )
+                                        |> Maybe.withDefault dirs
+                                )
+                                v.c
+                }
+            )
 
 
 {-| @private
@@ -504,8 +546,10 @@ vertexPairs sortAxisFn accum vertexes =
             vertexPairs sortAxisFn nextAccum (v2 :: rest)
 
 
-orderByX : Vertex -> Vertex -> Order
-orderByX vl vr =
+{-| @private
+-}
+orderByXAsc : Vertex -> Vertex -> Order
+orderByXAsc vl vr =
     if vl.x > vr.x then
         GT
     else if vl.x < vr.x then
@@ -518,8 +562,26 @@ orderByX vl vr =
         LT
 
 
-orderByY : Vertex -> Vertex -> Order
-orderByY vl vr =
+{-| @private
+-}
+orderByXDesc : Vertex -> Vertex -> Order
+orderByXDesc vl vr =
+    if vl.x > vr.x then
+        LT
+    else if vl.x < vr.x then
+        GT
+    else if vl.y == vr.y then
+        EQ
+    else if vl.y > vr.y then
+        LT
+    else
+        GT
+
+
+{-| @private
+-}
+orderByYAsc : Vertex -> Vertex -> Order
+orderByYAsc vl vr =
     if vl.y > vr.y then
         GT
     else if vl.y < vr.y then
@@ -534,13 +596,30 @@ orderByY vl vr =
 
 {-| @private
 -}
+orderByYDesc : Vertex -> Vertex -> Order
+orderByYDesc vl vr =
+    if vl.y > vr.y then
+        LT
+    else if vl.y < vr.y then
+        GT
+    else if vl.x == vr.x then
+        EQ
+    else if vl.x > vr.x then
+        LT
+    else
+        GT
+
+
+{-| @private
+-}
 findLines : List Vertex -> List ( Vertex, Vertex )
 findLines vertexes =
     let
         horizontal =
             vertexes
-                |> List.sortWith orderByY
+                |> List.sortWith orderByYAsc
                 |> vertexPairs .y []
+                |> List.reverse
                 |> (\result ->
                         let
                             _ =
@@ -551,8 +630,9 @@ findLines vertexes =
 
         vertical =
             vertexes
-                |> List.sortWith orderByX
+                |> List.sortWith orderByXAsc
                 |> vertexPairs .x []
+                |> List.reverse
                 |> (\result ->
                         let
                             _ =
@@ -607,14 +687,14 @@ findPolyPoints grid polyVertexes edges =
 
         ( xmin, xmax ) =
             polyVertexes
-                |> List.sortWith orderByX
+                |> List.sortWith orderByXAsc
                 |> List.map .x
                 |> (\l -> ( List.minimum l |> Maybe.withDefault 0, List.maximum l |> Maybe.withDefault 0 ))
                 |> Debug.log "xmin, xmax"
 
         ( ymin, ymax ) =
             polyVertexes
-                |> List.sortWith orderByY
+                |> List.sortWith orderByYAsc
                 |> List.map .y
                 |> (\l -> ( List.minimum l |> Maybe.withDefault 0, List.maximum l |> Maybe.withDefault 0 ))
                 |> Debug.log "ymin, ymax"
