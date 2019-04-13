@@ -25,6 +25,7 @@ import Keys exposing (KeyName(..))
 import Maybe.Extra as EMaybe
 import Messages exposing (Msg(..))
 import Random exposing (Generator, Seed)
+import Set
 import Task exposing (Task)
 import Time exposing (Time)
 
@@ -124,34 +125,67 @@ Thus, first conquerSpace:
 conquer : Grid -> Grid
 conquer grid =
     conquerSpace grid
-        |> conquerTrail
+
+
+
+--        |> conquerTrail
 
 
 conquerSpace : Grid -> Grid
 conquerSpace grid =
     let
+        outline =
+            Debug.log "outline" (findOutline grid)
+
         vertexes =
-            Debug.log "vertexes" (findVertexes grid)
+            Debug.log "vertexes" (findVertexes outline)
 
-        lines =
-            Debug.log "lines" (findLines vertexes)
+        {-
+           lines =
+               Debug.log "lines" (findLines vertexes)
 
-        ( poly1, poly2 ) =
-            Debug.log "polygons" findPolyVertexes grid vertexes
+           ( poly1, poly2 ) =
+               Debug.log "polygons" findPolyVertexes grid vertexes
 
-        ( polyLines1, polyLines2 ) =
-            ( Debug.log "poly 1 lines" (findPolyLines poly1 lines)
-            , Debug.log "poly 2 lines" (findPolyLines poly2 lines)
-            )
+           ( polyLines1, polyLines2 ) =
+               ( Debug.log "poly 1 lines" (findPolyLines poly1 lines)
+               , Debug.log "poly 2 lines" (findPolyLines poly2 lines)
+               )
 
-        ( polyPoints1, polyPoints2 ) =
-            ( Debug.log "poly 1 points" (findPolyPoints grid poly1 polyLines1)
-            , Debug.log "poly 2 points" (findPolyPoints grid poly2 polyLines2)
-            )
+           ( polyPoints1, polyPoints2 ) =
+               ( Debug.log "poly 1 points" (findPolyPoints grid poly1 polyLines1)
+               , Debug.log "poly 2 points" (findPolyPoints grid poly2 polyLines2)
+               )
+        -}
+        colorOutline grid =
+            { grid
+                | cells =
+                    grid.cells
+                        |> Dict.map (\xy mc -> mc |> Maybe.map (\c -> { c | color = Color.darkPurple }))
+            }
+
+        colorVertex grid =
+            { grid
+                | cells =
+                    vertexes
+                        |> List.foldl
+                            (\{ x, y } accum ->
+                                accum
+                                    |> Dict.insert ( x, y ) (Cell.border Color.darkYellow x y |> Just)
+                            )
+                            grid.cells
+            }
     in
     grid
-        |> fillPolyPoints polyPoints1
-        |> fillPolyPoints polyPoints2
+        |> colorOutline
+        |> colorVertex
+
+
+
+{-
+   |> fillPolyPoints polyPoints1
+   |> fillPolyPoints polyPoints2
+-}
 
 
 conquerTrail : Grid -> Grid
@@ -237,9 +271,42 @@ empty =
 
 
 {-| @private
+Count free space of specified point.
 -}
-countTurns : Dict ( Int, Int ) (Maybe Cell) -> ( Int, Int ) -> Turns
-countTurns cells point =
+countSpace : Dict ( Int, Int ) (Maybe Cell) -> ( Int, Int ) -> Int
+countSpace cells point =
+    let
+        sidePoints ( x, y ) =
+            [ ( x + 1, y )
+            , ( x - 1, y )
+            , ( x, y - 1 )
+            , ( x, y + 1 )
+            , ( x + 1, y - 1 )
+            , ( x + 1, y + 1 )
+            , ( x - 1, y + 1 )
+            , ( x - 1, y - 1 )
+            ]
+    in
+    sidePoints point
+        |> List.foldl
+            (\p count ->
+                case Dict.get p cells of
+                    Nothing ->
+                        count
+
+                    Just mc ->
+                        if Cell.isSpace mc then
+                            count + 1
+                        else
+                            count
+            )
+            0
+
+
+{-| @private
+-}
+countTurns : Dict ( Int, Int ) ( Int, Int ) -> ( Int, Int ) -> Turns
+countTurns outline point =
     let
         turnPoints ( x, y ) =
             [ { p = ( x, y )
@@ -267,45 +334,72 @@ countTurns cells point =
               , dirs = [ East, North ]
               }
             ]
+
+        accumulate r p dirs =
+            { r
+                | count_set = Set.insert p r.count_set
+                , directions =
+                    dirs
+                        |> List.foldl
+                            (\dir a ->
+                                a
+                                    |> List.filter (\d -> d == dir)
+                                    |> List.head
+                                    |> Maybe.map (\_ -> a)
+                                    |> Maybe.withDefault (dir :: a)
+                            )
+                            r.directions
+            }
     in
     turnPoints point
         |> List.foldl
             (\{ p, p1, p2, space, dirs } accum ->
-                case ( Dict.get p cells, Dict.get p1 cells, Dict.get p2 cells, Dict.get space cells ) of
-                    ( Just mc, Just mc1, Just mc2, Just mcs ) ->
-                        if (Cell.isBorder mc || Cell.isTrail mc || Cell.isPlayer mc) && (Cell.isBorder mc1 || Cell.isTrail mc1) && (Cell.isBorder mc2 || Cell.isTrail mc2) && Cell.isSpace mcs then
-                            { accum
-                                | count = accum.count + 1
-                                , directions =
-                                    dirs
-                                        |> List.foldl
-                                            (\dir a ->
-                                                a
-                                                    |> List.filter (\d -> d == dir)
-                                                    |> List.head
-                                                    |> Maybe.map (\_ -> a)
-                                                    |> Maybe.withDefault (dir :: a)
-                                            )
-                                            accum.directions
-                            }
-                        else
-                            accum
+                case ( Dict.get p1 outline, Dict.get p2 outline, Dict.get space outline ) of
+                    ( Just mc1, Just mc2, Nothing ) ->
+                        accumulate accum p dirs
+
+                    -- This handles special case of a double trail - no spacing between to trails
+                    ( Nothing, Nothing, Nothing ) ->
+                        accumulate accum p dirs
 
                     _ ->
                         accum
             )
-            { count = 0, directions = [] }
+            { count_set = Set.empty, directions = [] }
+        |> (\{ count_set, directions } -> { count = Set.size count_set, directions = directions })
 
 
-findVertexes : Grid -> List Vertex
-findVertexes grid =
+{-| @private
+-}
+findOutline : Grid -> List ( Int, Int )
+findOutline grid =
     grid.cells
         |> Dict.filter (\_ mc -> Cell.isPlayer mc || Cell.isBorder mc || Cell.isTrail mc)
+        |> Dict.foldl
+            (\point _ accum ->
+                if countSpace grid.cells point >= 1 then
+                    Set.insert point accum
+                else
+                    accum
+            )
+            Set.empty
+        |> Set.toList
+
+
+findVertexes : List ( Int, Int ) -> List Vertex
+findVertexes outline =
+    let
+        outDict =
+            outline
+                |> List.map (\p -> ( p, p ))
+                |> Dict.fromList
+    in
+    outDict
         |> Dict.foldl
             (\( cx, cy ) _ accum ->
                 let
                     { count, directions } =
-                        countTurns grid.cells ( cx, cy )
+                        countTurns outDict ( cx, cy )
                 in
                 if count >= 1 then
                     { x = cx, y = cy, c = directions } :: accum
@@ -381,6 +475,9 @@ findPolyVertexes grid vertexes =
     ( poly1, poly2 )
 
 
+{-| @private
+Given a XY or YX sort list of (potential) vertexes, find horizontal or vertical pairs.
+-}
 vertexPairs : (Vertex -> Int) -> List ( Vertex, Vertex ) -> List Vertex -> List ( Vertex, Vertex )
 vertexPairs sortAxisFn accum vertexes =
     case vertexes of
